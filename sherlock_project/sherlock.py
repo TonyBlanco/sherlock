@@ -503,7 +503,12 @@ def sherlock(
 
         # Save results from request
         results_site["http_status"] = http_status
-        results_site["response_text"] = response_text
+        # NOTE: the response body is intentionally NOT retained here. Storing
+        # every site's full text accumulated hundreds of MB over a 492-site run
+        # and OOM-killed small containers (e.g. Render free tier, 512MB) about
+        # 90 seconds into each search. Nothing downstream reads this field —
+        # verbose debugging prints r.text directly above — so keep it empty.
+        results_site["response_text"] = None
 
         # Add this site's results into final dictionary with all of the other results.
         results_total[social_network] = results_site
