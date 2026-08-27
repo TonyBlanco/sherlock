@@ -1,0 +1,76 @@
+name: Sync upstream sites
+
+# Weekly check for new/changed sites in the upstream Sherlock project.
+# Opens (or updates) a PR when data.json would change; does nothing when
+# the local list is already in sync. Local-only sites (Facebook, Weibo,
+# Threads, ...) are never removed by sync_sites.py.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream-sites
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run sync (dry run first, for the log)
+        run: python sync_sites.py --update-existing --dry-run
+
+      - name: Run sync (write)
+        run: python sync_sites.py --update-existing | tee sync_result.txt
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if git diff --quiet sherlock_project/resources/data.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update PR
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH=chore/sync-upstream-sites
+          DATE=$(date -u +%Y-%m-%d)
+          git checkout -B "$BRANCH"
+          git add sherlock_project/resources/data.json
+          git commit -m "Sync data.json with upstream ($DATE)"
+          git push -f origin "$BRANCH"
+          {
+            echo "## Sincronización semanal con upstream"
+            echo ""
+            echo '```'
+            cat sync_result.txt
+            echo '```'
+            echo ""
+            echo "PR automático: revisa el diff antes de mergear. Los sitios solo-locales"
+            echo "(Facebook, Weibo, Threads, ...) nunca se eliminan."
+          } > pr_body.md
+          gh pr create \
+            --base master \
+            --head "$BRANCH" \
+            --title "Sync upstream sites ($DATE)" \
+            --body-file pr_body.md \
+          || echo "PR ya existía para $BRANCH — la rama se actualizó"
