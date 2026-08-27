@@ -398,6 +398,53 @@ def api_debug():
     return jsonify(info)
 
 
+_SITES_CACHE = None
+
+
+@app.route('/api/sites')
+def api_sites():
+    """List every supported site with its status (deployment health check).
+
+    Serves two purposes: verifying that data.json shipped correctly with the
+    deployment (a missing/corrupt file returns a 500 with the parse error)
+    and letting the UI or scripts inspect the site list without downloading
+    data.json. Parsed once per process and cached.
+    """
+    global _SITES_CACHE
+    if _SITES_CACHE is not None:
+        return jsonify(_SITES_CACHE)
+    data_path = os.path.join(SCRIPT_DIR, 'sherlock_project', 'resources', 'data.json')
+    try:
+        with open(data_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'data.json unreadable: {e}',
+            'total': 0,
+            'sites': [],
+        }), 500
+    sites = []
+    for name, net in data.items():
+        if name == '$schema':
+            continue
+        sites.append({
+            'name': name,
+            'urlMain': net.get('urlMain', ''),
+            'isNSFW': bool(net.get('isNSFW', False)),
+            'errorType': net.get('errorType', ''),
+            'has_regex': 'regexCheck' in net,
+        })
+    sites.sort(key=lambda s: s['name'].lower())
+    _SITES_CACHE = {
+        'success': True,
+        'total': len(sites),
+        'source': 'sherlock_project/resources/data.json',
+        'sites': sites,
+    }
+    return jsonify(_SITES_CACHE)
+
+
 @app.route('/search', methods=['POST'])
 def search():
     username = sanitize_username(request.form.get('username', '').strip())
