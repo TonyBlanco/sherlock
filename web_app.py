@@ -772,10 +772,13 @@ if __name__ == '__main__':
     print("  Sherlock Web Interface")
     print("  Open http://localhost:5000 in your browser")
     print("=" * 60)
+    # Read the port from the PORT env var when set (Render/Railway/Fly inject
+    # this); default to 5000 for local development.
+    port = int(os.environ.get('PORT', '5000'))
     # Use waitress (production WSGI server, multi-threaded) when available;
     # fall back to Flask's built-in dev server otherwise.
     try:
         from waitress import serve
-        serve(app, host='0.0.0.0', port=5000, threads=16)
+        serve(app, host='0.0.0.0', port=port, threads=16)
     except ImportError:
-        app.run(debug=False, host='0.0.0.0', port=5000)
+        app.run(debug=False, host='0.0.0.0', port=port)

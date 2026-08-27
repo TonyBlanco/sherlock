@@ -213,12 +213,19 @@ def sherlock(
     # Normal requests
     underlying_session = requests.session()
 
-    # Limit number of workers to 20.
-    # This is probably vastly overkill.
-    if len(site_data) >= 20:
+    # Limit number of workers to 20 by default (this is probably vastly
+    # overkill). Allowed to be lowered via the SHERLOCK_MAX_WORKERS env var so
+    # constrained environments (e.g. a 512MB free-tier container) can keep the
+    # peak parallel HTTP concurrency (and thus memory) within budget.
+    import os as _os
+    try:
+        max_workers = int(_os.environ.get('SHERLOCK_MAX_WORKERS', '20'))
+    except Exception:
         max_workers = 20
-    else:
+    if len(site_data) < max_workers:
         max_workers = len(site_data)
+    if max_workers < 1:
+        max_workers = 1
 
     # Create multi-threaded session for all requests.
     session = SherlockFuturesSession(

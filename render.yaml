@@ -1,0 +1,24 @@
+# Render blueprint — deploys the Sherlock Web UI for free.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Free instance caveats:
+#  - 512MB RAM / single instance, sleeps after 15 min without traffic.
+#  - Each search takes ~25-45s (fewer if cached). This fits Render's 60s
+#    request cap but close — searches only work reliably when not already
+#    running another search (free = 1 instance).
+#  - Add a free Cron at your dashboard (e.g. a GET to / every 14 min) to keep
+#    it warm if you do not want cold-start delays.
+services:
+  - type: web
+    name: sherlock-web
+    runtime: docker
+    plan: free
+    region: frankfurt
+    rootDir: .
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: SHERLOCK_MAX_WORKERS
+        value: 6
+      - key: PORT
+        value: 10000

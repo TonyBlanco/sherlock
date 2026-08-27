@@ -6,3 +6,6 @@ tests/
 !/requirements.txt
 venv/
 devel/
+cache/
+__pycache__/
+*.pyc
