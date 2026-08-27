@@ -74,6 +74,10 @@ def run_sherlock_search(username, timeout=10):
             sys.executable, "-m", "sherlock_project.sherlock",
             "--local",
             "--timeout", str(timeout),
+            # print_found defaults to True in Sherlock, which makes the CSV only
+            # contain Claimed sites. We want every site so the UI can show
+            # found/not-found/error counts accurately.
+            "--print-all",
             "--csv",
             username
         ]

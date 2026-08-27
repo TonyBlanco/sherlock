@@ -3397,5 +3397,33 @@
     "errorMsg": [
       "データがありません"
     ]
+  },
+  "Tagged": {
+    "url": "http://www.tagged.com/{}",
+    "urlMain": "http://www.tagged.com",
+    "errorType": "status_code",
+    "username_claimed": "chanelthebagg"
+  },
+  "MeetMe": {
+    "url": "https://www.meetme.com/{}",
+    "urlMain": "https://www.meetme.com/",
+    "errorType": "response_url",
+    "errorUrl": "https://www.meetme.com/",
+    "username_claimed": "blue"
+  },
+  "Xing": {
+    "url": "https://www.xing.com/profile/{}",
+    "urlMain": "https://www.xing.com/",
+    "errorType": "status_code",
+    "username_claimed": "Ivan_Ivanov"
+  },
+  "Paltalk": {
+    "url": "https://www.paltalk.com/people/users/{}",
+    "urlMain": "https://www.paltalk.com",
+    "errorType": "message",
+    "errorMsg": [
+      "\"profileData\":{}"
+    ],
+    "username_claimed": "red"
   }
 }
