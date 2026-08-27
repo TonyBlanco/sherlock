@@ -1250,6 +1250,28 @@
             
             const data = await response.json();
             
+            if (data.success && data.async) {
+                // Fresh search runs server-side in the background (free hosting
+                // cuts requests over ~60s); poll until it is done.
+                for (let i = 0; i < 100; i++) {
+                    await new Promise(r => setTimeout(r, 3000));
+                    let st;
+                    try {
+                        const stResp = await fetch('/search-status/' + encodeURIComponent(username));
+                        if (!stResp.ok) continue;
+                        st = await stResp.json();
+                    } catch (err) {
+                        continue;
+                    }
+                    if (st.success && st.status === 'done') {
+                        displayResults(st.result);
+                        return;
+                    }
+                }
+                alert('La búsqueda está tardando demasiado. Vuelve a intentarlo en un minuto: los resultados quedaron guardados.');
+                return;
+            }
+            
             if (data.success) {
                 displayResults(data);
             } else {

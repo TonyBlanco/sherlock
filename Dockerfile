@@ -5,8 +5,8 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Lower the sherlock subprocess's parallel HTTP concurrency so it stays within
-# the 512MB free-tier RAM (default is 20; free container gets headroom).
-ENV SHERLOCK_MAX_WORKERS=6
+# the 512MB free-tier RAM (default is 20; 4 keeps peak response buffering low).
+ENV SHERLOCK_MAX_WORKERS=4
 ENV PYTHONUNBUFFERED=1
 
 # System deps are minimal; copy requirements first to benefit from layer cache.

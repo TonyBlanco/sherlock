@@ -45,6 +45,13 @@ last_comparison = {}
 search_progress = {}      # search_id -> progress dict
 variant_final_results = {}  # search_id -> final payload
 
+# Asynchronous single searches: on free hosting the HTTP proxy cuts requests
+# at ~60s and a fresh 492-site search regularly exceeds that, which used to
+# kill the response with a 502. Fresh searches now run in a background thread
+# and the UI polls /search-status/<username> until done.
+single_searches = {}          # username -> {'status': 'running'|'done', 'result': ...}
+_single_search_lock = threading.Lock()
+
 
 def _cache_path(username):
     safe = re.sub(r'[^a-zA-Z0-9_.\-]', '_', username)
@@ -150,7 +157,7 @@ def sanitize_result_urls(results):
     return results
 
 
-def run_sherlock_search(username, timeout=6, skip_sites=None):
+def run_sherlock_search(username, timeout=5, skip_sites=None):
     """Run Sherlock search and return results as JSON.
 
     Uses the on-disk cache when a fresh result already exists.
@@ -318,6 +325,31 @@ def api_debug():
         'env_pythonpath': os.environ.get('PYTHONPATH', ''),
         'dir_listing': sorted(os.listdir(SCRIPT_DIR)),
     }
+    # Memory readings (Linux container): app RSS + RSS of child processes.
+    try:
+        with open('/proc/self/status', 'r') as f:
+            for line in f:
+                if line.startswith('VmRSS'):
+                    info['app_rss_kb'] = int(line.split()[1])
+                    break
+        children = []
+        for pid in os.listdir('/proc'):
+            if not pid.isdigit() or int(pid) == os.getpid():
+                continue
+            try:
+                with open(f'/proc/{pid}/status', 'r') as f:
+                    fields = {}
+                    for line in f:
+                        if line.startswith('VmRSS'):
+                            fields['rss_kb'] = int(line.split()[1])
+                            break
+                if fields:
+                    children.append({'pid': int(pid), 'rss_kb': fields['rss_kb']})
+            except Exception:
+                pass
+        info['child_processes'] = children
+    except Exception:
+        pass
     data_path = os.path.join(SCRIPT_DIR, 'sherlock_project', 'resources', 'data.json')
     info['data_json_path'] = data_path
     info['data_json_exists'] = os.path.exists(data_path)
@@ -340,11 +372,57 @@ def api_debug():
 
 @app.route('/search', methods=['POST'])
 def search():
-    username = request.form.get('username', '').strip()
+    username = sanitize_username(request.form.get('username', '').strip())
     if not username:
         return jsonify({'success': False, 'error': 'Username is required'})
-    results = run_sherlock_search(username)
-    return jsonify(results)
+
+    # Fresh cached results: answer synchronously as before.
+    cached, _ = cache_get(username)
+    if cached is not None:
+        return jsonify(run_sherlock_search(username))
+
+    # Otherwise run in the background and let the UI poll for the result.
+    with _single_search_lock:
+        job = single_searches.get(username)
+        if job and job['status'] == 'running':
+            return jsonify({'success': True, 'async': True, 'username': username})
+        single_searches[username] = {'status': 'running', 'result': None}
+
+    def _worker():
+        res = run_sherlock_search(username)
+        with _single_search_lock:
+            single_searches[username] = {'status': 'done', 'result': res}
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return jsonify({'success': True, 'async': True, 'username': username})
+
+
+@app.route('/search-status/<username>')
+def search_status(username):
+    """Poll the status of an asynchronous single search."""
+    username = sanitize_username(username)
+    job = single_searches.get(username)
+    if not job:
+        # Fall back to the disk cache: the result may have landed there.
+        cached, cached_at = cache_get(username)
+        if cached is not None:
+            results = sanitize_result_urls([dict(r) for r in cached])
+            return jsonify({
+                'success': True,
+                'status': 'done',
+                'result': {
+                    'success': True,
+                    'username': username,
+                    'results': results,
+                    'stats': compute_stats(results),
+                    'cached': True,
+                    'cached_at': cached_at,
+                },
+            })
+        return jsonify({'success': False, 'error': 'Búsqueda no encontrada'}), 404
+    if job['status'] == 'running':
+        return jsonify({'success': True, 'status': 'running'})
+    return jsonify({'success': True, 'status': 'done', 'result': job['result']})
 
 
 def normalize_name(name):
@@ -835,6 +913,6 @@ if __name__ == '__main__':
     # fall back to Flask's built-in dev server otherwise.
     try:
         from waitress import serve
-        serve(app, host='0.0.0.0', port=port, threads=16)
+        serve(app, host='0.0.0.0', port=port, threads=6)
     except ImportError:
         app.run(debug=False, host='0.0.0.0', port=port)
