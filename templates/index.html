@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sherlock - Buscador de Usuarios</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #6c5ce7;
+            --secondary-color: #a29bfe;
+            --success-color: #00b894;
+            --danger-color: #d63031;
+            --warning-color: #fdcb6e;
+            --dark-bg: #2d3436;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --text-secondary: #666666;
+            --border-color: #e0e0e0;
+            --table-hover: #f8f9fa;
+            --input-border: #e0e0e0;
+        }
+        
+        body.dark-mode {
+            --primary-color: #a29bfe;
+            --secondary-color: #6c5ce7;
+            --card-bg: #1e1e2e;
+            --text-color: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border-color: #3a3a4a;
+            --table-hover: #2a2a3a;
+            --input-border: #4a4a5a;
+        }
+        
+        /* Dark gradient crossfades in over the light gradient for a smooth switch */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            opacity: 0;
+            transition: opacity 0.7s ease;
+            pointer-events: none;
+        }
+        
+        body.dark-mode::before {
+            opacity: 1;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-color);
+            isolation: isolate;
+            transition: color 0.5s ease;
+        }
+        
+        /* Smooth transitions for all themed elements */
+        .search-card, .stats-card, .results-table, .history-card, .variants-card,
+        .search-input, .dark-mode-toggle, .badge-not-found, .history-item,
+        .variant-pill, .table tbody td, .stat-number, .stat-label,
+        .variant-hint, .history-header h5, .no-results, .variant-count,
+        .export-btn {
+            transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
+        }
+        
+        .dark-mode-toggle i {
+            display: inline-block;
+            transition: transform 0.6s ease;
+        }
+        
+        body.dark-mode .dark-mode-toggle i {
+            transform: rotate(360deg);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 40px 0;
+            color: white;
+        }
+        
+        .header {
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .dark-mode-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50px;
+            padding: 10px 20px;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .dark-mode-toggle:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.05);
+        }
+        
+        body.dark-mode .dark-mode-toggle {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.2);
+        }
+        
+        .search-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 15px 25px;
+            font-size: 1.1rem;
+            border: 2px solid var(--input-border);
+            border-radius: 50px;
+            outline: none;
+            transition: all 0.3s ease;
+            background: var(--card-bg);
+            color: var(--text-color);
+        }
+        
+        body.dark-mode .search-input {
+            background: #2a2a3a;
+            color: #e0e0e0;
+        }
+        
+        .search-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2);
+        }
+        
+        .search-btn {
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(108, 92, 231, 0.4);
+        }
+        
+        .search-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .variant-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+            cursor: pointer;
+            user-select: none;
+            color: var(--text-color);
+        }
+        
+        .variant-toggle input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary-color);
+            cursor: pointer;
+        }
+        
+        .variant-toggle .variant-hint {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-left: auto;
+        }
+        
+        .variants-summary {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .variants-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .variants-card h5 {
+            margin: 0 0 15px 0;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+        
+        .variant-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 10px;
+        }
+        
+        .variant-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background: var(--table-hover);
+            color: var(--text-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+        
+        .variant-pill:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+        
+        .variant-pill .variant-check {
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        
+        .variant-pill .variant-name {
+            font-weight: 500;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .variant-pill .variant-count {
+            font-size: 0.75rem;
+            background: var(--border-color);
+            padding: 2px 8px;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+        
+        .variant-pill.found {
+            border-color: var(--success-color);
+            background: rgba(0, 184, 148, 0.12);
+        }
+        
+        .variant-pill.found .variant-check {
+            color: var(--success-color);
+        }
+        
+        .variant-pill.notfound .variant-check {
+            color: var(--text-secondary);
+        }
+        
+        .variant-pill.error .variant-check {
+            color: var(--danger-color);
+        }
+        
+        .comparison-section {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .comparison-table-wrap {
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .comparison-table {
+            margin-bottom: 0;
+            min-width: 100%;
+        }
+        
+        .comparison-table th {
+            position: sticky;
+            top: 0;
+            background: var(--primary-color);
+            color: white;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            z-index: 1;
+        }
+        
+        .comparison-table td {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            border-color: var(--border-color);
+        }
+        
+        .comparison-table .cell-center {
+            text-align: center;
+            min-width: 50px;
+        }
+        
+        .comparison-table tr.match-all {
+            background: rgba(0, 184, 148, 0.15);
+        }
+        
+        body.dark-mode .comparison-table tr.match-all {
+            background: rgba(0, 184, 148, 0.18);
+        }
+        
+        .check-yes {
+            color: var(--success-color);
+            font-weight: 700;
+        }
+        
+        .check-no {
+            color: var(--text-secondary);
+        }
+        
+        .match-all-badge {
+            background: var(--success-color);
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+        
+        .history-section {
+            margin-top: 20px;
+        }
+        
+        .history-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .history-header h5 {
+            margin: 0;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+        
+        .history-clear-btn {
+            background: none;
+            border: 1px solid var(--danger-color);
+            color: var(--danger-color);
+            padding: 5px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+        
+        .history-clear-btn:hover {
+            background: var(--danger-color);
+            color: white;
+        }
+        
+        .history-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .history-item {
+            background: var(--table-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 25px;
+            padding: 8px 18px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-color);
+            font-size: 0.95rem;
+        }
+        
+        .history-item:hover {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+        
+        .history-item:hover .history-count {
+            background: rgba(255,255,255,0.3);
+            color: white;
+        }
+        
+        .history-count {
+            background: var(--border-color);
+            color: var(--text-secondary);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .history-item:hover .history-count {
+            background: rgba(255,255,255,0.3);
+            color: white;
+        }
+        
+        .history-empty {
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+        }
+        
+        .results-section {
+            display: none;
+        }
+        
+        .stats-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .results-table {
+            background: var(--card-bg);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .table {
+            margin-bottom: 0;
+        }
+        
+        .table thead th {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 15px;
+            font-weight: 600;
+        }
+        
+        .table tbody td {
+            padding: 15px;
+            vertical-align: middle;
+        }
+        
+        .table tbody tr:hover {
+            background: var(--table-hover);
+        }
+        
+        body.dark-mode .table tbody td {
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+        
+        .badge-found {
+            background: var(--success-color);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .badge-not-found {
+            background: #e9ecef;
+            color: #666;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        body.dark-mode .badge-not-found {
+            background: #4a4a5a;
+            color: #b0b0b0;
+        }
+        
+        .badge-error {
+            background: var(--danger-color);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .site-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .site-link:hover {
+            text-decoration: underline;
+        }
+        
+        .site-icon {
+            width: 18px;
+            margin-right: 8px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-bottom: 15px;
+        }
+        
+        .export-btn {
+            padding: 10px 25px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .export-btn-csv {
+            background: var(--success-color);
+            color: white;
+        }
+        
+        .export-btn-csv:hover {
+            background: #00a884;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 184, 148, 0.4);
+        }
+        
+        .export-btn-pdf {
+            background: var(--danger-color);
+            color: white;
+        }
+        
+        .export-btn-pdf:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(214, 48, 49, 0.4);
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: white;
+            opacity: 0.8;
+        }
+        
+        @media (max-width: 768px) {
+            .search-form {
+                flex-direction: column;
+            }
+            
+            .search-btn {
+                width: 100%;
+            }
+            
+            .header h1 {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <button class="dark-mode-toggle" id="darkModeToggle">
+                <i class="fas fa-moon" id="darkModeIcon"></i>
+                <span id="darkModeText">Modo Oscuro</span>
+            </button>
+            <h1><i class="fas fa-search"></i> Sherlock</h1>
+            <p>Busca usuarios en más de 400 redes sociales</p>
+        </div>
+        
+        <!-- Search Card -->
+        <div class="search-card">
+            <form class="search-form" id="searchForm">
+                <input type="text" 
+                       class="search-input" 
+                       id="username" 
+                       name="username" 
+                       placeholder="Nombre, usuario, email o varios separados por coma..." 
+                       required
+                       autocomplete="off">
+                <button type="submit" class="search-btn" id="searchBtn">
+                    <i class="fas fa-search"></i> Buscar
+                </button>
+            </form>
+            <label class="variant-toggle">
+                <input type="checkbox" id="variantMode">
+                <span><i class="fas fa-code-branch"></i> Buscar variantes del nombre</span>
+                <span class="variant-hint">ej: Tony Blanco o tony.blanco@gmail.com → variantes automáticas</span>
+            </label>
+        </div>
+        
+        <!-- Search History -->
+        <div class="history-section" id="historySection">
+            <div class="history-card">
+                <div class="history-header">
+                    <h5><i class="fas fa-history"></i> Historial de Búsquedas</h5>
+                    <button class="history-clear-btn" id="clearHistoryBtn">
+                        <i class="fas fa-trash-alt"></i> Limpiar
+                    </button>
+                </div>
+                <div class="history-list" id="historyList">
+                    <div class="history-empty" id="historyEmpty">
+                        No hay búsquedas anteriores aún
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Variants Summary -->
+        <div class="variants-summary" id="variantsSummary">
+            <div class="variants-card">
+                <h5><i class="fas fa-code-branch"></i> <span id="variantTitle">Variantes de</span> <span id="variantFullName"></span></h5>
+                <div class="variant-grid" id="variantGrid"></div>
+            </div>
+        </div>
+        
+        <!-- Cross-Variant Comparison -->
+        <div class="comparison-section" id="comparisonSection">
+            <div class="variants-card">
+                <h5>
+                    <i class="fas fa-layer-group"></i> Comparación entre variantes
+                    <span class="match-all-badge">✓ = presente en TODAS</span>
+                </h5>
+                <div class="comparison-table-wrap">
+                    <table class="table comparison-table">
+                        <thead id="comparisonHead"></thead>
+                        <tbody id="comparisonBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <h4>Buscando en redes sociales...</h4>
+            <p>Esto puede tomar unos segundos</p>
+        </div>
+        
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <!-- Stats -->
+            <div class="stats-card">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-number" id="totalChecked">0</div>
+                            <div class="stat-label">Verificados</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-number text-success" id="foundCount">0</div>
+                            <div class="stat-label">Encontrados</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-number text-secondary" id="notFoundCount">0</div>
+                            <div class="stat-label">No Encontrados</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-number text-danger" id="errorCount">0</div>
+                            <div class="stat-label">Errores</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Export Buttons -->
+            <div class="export-buttons" id="exportButtons" style="display: none;">
+                <button class="export-btn export-btn-csv" id="exportCsvBtn">
+                    <i class="fas fa-file-csv"></i> Exportar CSV
+                </button>
+                <button class="export-btn export-btn-pdf" id="exportPdfBtn">
+                    <i class="fas fa-file-pdf"></i> Exportar PDF
+                </button>
+            </div>
+            
+            <!-- Results Table -->
+            <div class="results-table">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Sitio</th>
+                            <th>URL</th>
+                            <th>Estado</th>
+                            <th>HTTP Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- No Results Message -->
+            <div class="no-results" id="noResults" style="display: none;">
+                <i class="fas fa-info-circle fa-3x mb-3 text-muted"></i>
+                <h5>No se encontraron resultados</h5>
+                <p>Intenta con otro nombre de usuario</p>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>Sherlock Project &copy; 2024 | Creado con <i class="fas fa-heart text-danger"></i> by <strong>Tony Blanco</strong></p>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('searchForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            if (!username) return;
+            
+            // Auto-enable variant mode for emails and names with spaces.
+            // Searching a raw string with a space as a username produces broken
+            // URLs like .../tony%20blanco that return false positives / null.
+            const isEmail = username.includes('@');
+            const hasSpace = /\s/.test(username);
+            if (isEmail || hasSpace) {
+                document.getElementById('variantMode').checked = true;
+            }
+            const useVariants = document.getElementById('variantMode').checked;
+            // Detect multiple usernames separated by commas / newlines
+            const isMulti = /[,;\n]/.test(username) && !username.includes('@');
+            
+            // Show loading, hide results
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('variantsSummary').style.display = 'none';
+            document.getElementById('searchBtn').disabled = true;
+            
+            try {
+                if (isMulti) {
+                    // Search several usernames at once
+                    const response = await fetch('/search-multi', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `usernames=${encodeURIComponent(username)}`
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        displayVariants(data);
+                        const best = data.variants.find(v => v.found > 0);
+                        if (best) {
+                            await loadSingleSearch(best.username);
+                        } else {
+                            document.getElementById('resultsSection').style.display = 'none';
+                            document.getElementById('noResults').style.display = 'block';
+                        }
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                } else if (useVariants) {
+                    // Search all variants of the full name
+                    const response = await fetch('/search-variants', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `fullname=${encodeURIComponent(username)}`
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        displayVariants(data);
+                        // Auto-load the best variant's full results
+                        const best = data.variants.find(v => v.found > 0);
+                        if (best) {
+                            await loadSingleSearch(best.username);
+                        } else {
+                            document.getElementById('resultsSection').style.display = 'none';
+                            document.getElementById('noResults').style.display = 'block';
+                        }
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                } else {
+                    await loadSingleSearch(username);
+                }
+            } catch (error) {
+                alert('Error de conexión: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('searchBtn').disabled = false;
+            }
+        });
+        
+        async function loadSingleSearch(username) {
+            // Fast path: variant searches already cached the full results
+            const cachedResp = await fetch('/results/' + encodeURIComponent(username));
+            if (cachedResp.ok) {
+                const cached = await cachedResp.json();
+                if (cached.success) {
+                    displayResults(cached);
+                    return;
+                }
+            }
+            
+            // Fallback: run a fresh search
+            const response = await fetch('/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `username=${encodeURIComponent(username)}`
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                displayResults(data);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        }
+        
+        function displayVariants(data) {
+            const grid = document.getElementById('variantGrid');
+            const summary = document.getElementById('variantsSummary');
+            grid.innerHTML = '';
+            document.getElementById('variantTitle').textContent = data.mode === 'multi' ? 'Resultados para' : 'Variantes de';
+            document.getElementById('variantFullName').textContent = data.fullname;
+            
+            // Show cross-variant comparison (only meaningful for name/email variants, not multi-user)
+            if (data.mode !== 'multi' && data.comparison && data.comparison.length > 0) {
+                displayComparison(data.comparison, data.variants);
+            } else {
+                document.getElementById('comparisonSection').style.display = 'none';
+            }
+            
+            data.variants.forEach(v => {
+                const pill = document.createElement('div');
+                pill.className = 'variant-pill';
+                
+                let checkIcon = '<i class="fas fa-times variant-check"></i>';
+                if (v.found > 0) {
+                    pill.classList.add('found');
+                    checkIcon = '<i class="fas fa-check-circle variant-check"></i>';
+                } else if (!v.success) {
+                    pill.classList.add('error');
+                    checkIcon = '<i class="fas fa-exclamation-triangle variant-check"></i>';
+                } else {
+                    pill.classList.add('notfound');
+                }
+                
+                pill.innerHTML = `
+                    ${checkIcon}
+                    <span class="variant-name">${v.username}</span>
+                    <span class="variant-count">${v.found} encontrados</span>
+                `;
+                
+                pill.addEventListener('click', function() {
+                    document.getElementById('username').value = v.username;
+                    document.getElementById('loading').style.display = 'block';
+                    loadSingleSearch(v.username).finally(() => {
+                        document.getElementById('loading').style.display = 'none';
+                    });
+                });
+                
+                grid.appendChild(pill);
+            });
+            
+            summary.style.display = 'block';
+        }
+        
+        // Search History
+        let searchHistory = JSON.parse(localStorage.getItem('sherlock-history') || '[]');
+        
+        function saveToHistory(username) {
+            // Find existing entry or create new
+            const existing = searchHistory.find(h => h.username.toLowerCase() === username.toLowerCase());
+            if (existing) {
+                existing.count++;
+                existing.lastSearch = new Date().toISOString();
+            } else {
+                searchHistory.unshift({
+                    username: username,
+                    count: 1,
+                    lastSearch: new Date().toISOString()
+                });
+            }
+            // Keep max 20 entries
+            searchHistory = searchHistory.slice(0, 20);
+            localStorage.setItem('sherlock-history', JSON.stringify(searchHistory));
+            renderHistory();
+        }
+        
+        function renderHistory() {
+            const list = document.getElementById('historyList');
+            
+            if (searchHistory.length === 0) {
+                list.innerHTML = '<div class="history-empty" id="historyEmpty">No hay b\u00fasquedas anteriores a\u00fan</div>';
+                return;
+            }
+            
+            list.innerHTML = '';
+            
+            searchHistory.forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'history-item';
+                el.innerHTML = `
+                    <i class="fas fa-user"></i>
+                    <span>${item.username}</span>
+                    <span class="history-count">${item.count}</span>
+                `;
+                el.addEventListener('click', function() {
+                    document.getElementById('username').value = item.username;
+                    document.getElementById('searchForm').dispatchEvent(new Event('submit'));
+                });
+                list.appendChild(el);
+            });
+        }
+        
+        function displayComparison(comparison, variants) {
+            const section = document.getElementById('comparisonSection');
+            const head = document.getElementById('comparisonHead');
+            const body = document.getElementById('comparisonBody');
+            const unames = variants.map(v => v.username);
+            
+            head.innerHTML = '<tr><th>Sitio</th>' +
+                unames.map(u => `<th>${u}</th>`).join('') +
+                '<th>Coincidencias</th></tr>';
+            
+            body.innerHTML = '';
+            comparison.forEach(c => {
+                const tr = document.createElement('tr');
+                if (c.all) tr.classList.add('match-all');
+                
+                let cells = `<td><strong>${c.site}</strong></td>`;
+                unames.forEach(u => {
+                    const yes = c.matched.includes(u);
+                    cells += `<td class="cell-center"><span class="${yes ? 'check-yes' : 'check-no'}">${yes ? '✓' : '✗'}</span></td>`;
+                });
+                cells += `<td class="cell-center"><strong>${c.count}/${variants.length}</strong></td>`;
+                tr.innerHTML = cells;
+                body.appendChild(tr);
+            });
+            
+            section.style.display = 'block';
+        }
+        
+        function clearHistory() {
+            searchHistory = [];
+            localStorage.removeItem('sherlock-history');
+            renderHistory();
+        }
+        
+        document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
+        
+        // Initial render
+        renderHistory();
+        
+        // Map site names to Font Awesome brand icons (fallback: generic globe)
+        const SITE_ICONS = [
+            ['github', 'fa-brands fa-github'],
+            ['gitlab', 'fa-brands fa-gitlab'],
+            ['gitee', 'fa-brands fa-git-alt'],
+            ['gitea', 'fa-brands fa-git-alt'],
+            ['gitbook', 'fa-brands fa-gitbook'],
+            ['reddit', 'fa-brands fa-reddit'],
+            ['twitter', 'fa-brands fa-twitter'],
+            ['xbox', 'fa-brands fa-xbox'],
+            ['instagram', 'fa-brands fa-instagram'],
+            ['youtube', 'fa-brands fa-youtube'],
+            ['tiktok', 'fa-brands fa-tiktok'],
+            ['twitch', 'fa-brands fa-twitch'],
+            ['discord', 'fa-brands fa-discord'],
+            ['telegram', 'fa-brands fa-telegram'],
+            ['spotify', 'fa-brands fa-spotify'],
+            ['soundcloud', 'fa-brands fa-soundcloud'],
+            ['linkedin', 'fa-brands fa-linkedin'],
+            ['facebook', 'fa-brands fa-facebook'],
+            ['pinterest', 'fa-brands fa-pinterest'],
+            ['tumblr', 'fa-brands fa-tumblr'],
+            ['flickr', 'fa-brands fa-flickr'],
+            ['deviantart', 'fa-brands fa-deviantart'],
+            ['behance', 'fa-brands fa-behance'],
+            ['dribbble', 'fa-brands fa-dribbble'],
+            ['codepen', 'fa-brands fa-codepen'],
+            ['stack overflow', 'fa-brands fa-stack-overflow'],
+            ['hackernews', 'fa-brands fa-hacker-news'],
+            ['hacker news', 'fa-brands fa-hacker-news'],
+            ['hackerrank', 'fa-brands fa-hackerrank'],
+            ['hackaday', 'fa-brands fa-hacker-news'],
+            ['medium', 'fa-brands fa-medium'],
+            ['wordpress', 'fa-brands fa-wordpress'],
+            ['blogger', 'fa-brands fa-blogger'],
+            ['vimeo', 'fa-brands fa-vimeo'],
+            ['snapchat', 'fa-brands fa-snapchat'],
+            ['slack', 'fa-brands fa-slack'],
+            ['steam', 'fa-brands fa-steam'],
+            ['apple', 'fa-brands fa-apple'],
+            ['google', 'fa-brands fa-google'],
+            ['envato', 'fa-brands fa-envato'],
+            ['playstation', 'fa-brands fa-playstation'],
+            ['vk', 'fa-brands fa-vk'],
+            ['mastodon', 'fa-brands fa-mastodon'],
+            ['imdb', 'fa-brands fa-imdb'],
+            ['stackoverflow', 'fa-brands fa-stack-overflow'],
+            ['codewars', 'fa-solid fa-code'],
+            ['leetcode', 'fa-solid fa-code'],
+            ['hackerearth', 'fa-solid fa-code'],
+            ['codechef', 'fa-solid fa-code'],
+            ['codeforces', 'fa-solid fa-code'],
+            ['python', 'fa-brands fa-python'],
+            ['wordnik', 'fa-solid fa-book'],
+            ['bookcrossing', 'fa-solid fa-book'],
+            ['bookstack', 'fa-solid fa-book'],
+            ['archive.org', 'fa-solid fa-box-archive'],
+            ['spotify', 'fa-brands fa-spotify'],
+            ['bandcamp', 'fa-brands fa-bandcamp'],
+            ['mixcloud', 'fa-brands fa-mixcloud'],
+            ['last.fm', 'fa-brands fa-lastfm'],
+            ['lastfm', 'fa-brands fa-lastfm'],
+            ['discogs', 'fa-solid fa-compact-disc'],
+            ['yandex', 'fa-solid fa-globe'],
+        ];
+        
+        function getSiteIcon(siteName) {
+            const name = (siteName || '').toLowerCase();
+            for (const [key, icon] of SITE_ICONS) {
+                if (name.includes(key)) {
+                    return icon;
+                }
+            }
+            return 'fa-solid fa-globe';
+        }
+        
+        function displayResults(data) {
+            const stats = data.stats;
+            const results = data.results;
+            currentUsername = data.username;
+            
+            // Save to history
+            saveToHistory(data.username);
+            
+            // Update stats
+            document.getElementById('totalChecked').textContent = stats.total_checked;
+            document.getElementById('foundCount').textContent = stats.found;
+            document.getElementById('notFoundCount').textContent = stats.not_found;
+            document.getElementById('errorCount').textContent = stats.errors;
+            
+            // Show export buttons
+            if (results.length > 0) {
+                document.getElementById('exportButtons').style.display = 'flex';
+            }
+            
+            // Clear previous results
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            
+            if (results.length === 0) {
+                document.getElementById('noResults').style.display = 'block';
+                document.querySelector('.results-table').style.display = 'none';
+            } else {
+                document.getElementById('noResults').style.display = 'none';
+                document.querySelector('.results-table').style.display = 'block';
+                
+                // Sort: found first, then not found, then errors
+                results.sort((a, b) => {
+                    const order = { 'CLAIMED': 0, 'AVAILABLE': 1, 'WAF': 2, 'ILLEGAL': 3 };
+                    return (order[a.exists] || 4) - (order[b.exists] || 4);
+                });
+                
+                results.forEach(result => {
+                    const row = document.createElement('tr');
+                    
+                    // Status badge
+                    let badgeClass = 'badge-not-found';
+                    let statusText = 'No Encontrado';
+                    if (result.exists === 'CLAIMED' || result.exists === 'Claimed') {
+                        badgeClass = 'badge-found';
+                        statusText = 'Encontrado';
+                    } else if (result.exists === 'WAF') {
+                        badgeClass = 'badge-error';
+                        statusText = 'Bloqueado (WAF)';
+                    } else if (result.exists === 'ILLEGAL') {
+                        badgeClass = 'badge-error';
+                        statusText = 'Formato Inválido';
+                    }
+                    
+                    row.innerHTML = `
+                        <td>
+                            <strong>
+                                <i class="${getSiteIcon(result.site_name)} site-icon"></i>${result.site_name}
+                            </strong>
+                        </td>
+                        <td>
+                            <a href="${result.url_user}" target="_blank" class="site-link">
+                                ${result.url_user ? result.url_user.substring(0, 50) + '...' : 'N/A'}
+                            </a>
+                        </td>
+                        <td><span class="badge ${badgeClass}">${statusText}</span></td>
+                        <td>${result.http_status || 'N/A'}</td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+            }
+            
+            document.getElementById('resultsSection').style.display = 'block';
+        }
+        
+        // Dark mode toggle
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        const darkModeIcon = document.getElementById('darkModeIcon');
+        const darkModeText = document.getElementById('darkModeText');
+        
+        // Check for saved preference
+        const savedMode = localStorage.getItem('sherlock-dark-mode');
+        if (savedMode === 'true') {
+            document.body.classList.add('dark-mode');
+            darkModeIcon.className = 'fas fa-sun';
+            darkModeText.textContent = 'Modo Claro';
+        }
+        
+        darkModeToggle.addEventListener('click', function() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            
+            localStorage.setItem('sherlock-dark-mode', isDark);
+            
+            if (isDark) {
+                darkModeIcon.className = 'fas fa-sun';
+                darkModeText.textContent = 'Modo Claro';
+            } else {
+                darkModeIcon.className = 'fas fa-moon';
+                darkModeText.textContent = 'Modo Oscuro';
+            }
+        });
+        
+        // Export buttons
+        let currentUsername = '';
+        
+        document.getElementById('exportCsvBtn').addEventListener('click', function() {
+            if (currentUsername) {
+                window.location.href = '/export/csv/' + encodeURIComponent(currentUsername);
+            }
+        });
+        
+        document.getElementById('exportPdfBtn').addEventListener('click', function() {
+            if (currentUsername) {
+                window.location.href = '/export/pdf/' + encodeURIComponent(currentUsername);
+            }
+        });
+        
+        // Focus on input on page load
+        document.getElementById('username').focus();
+    </script>
+</body>
+</html>

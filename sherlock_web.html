@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sherlock - Buscador de Usuarios</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #6c5ce7;
+            --secondary-color: #a29bfe;
+            --success-color: #00b894;
+            --danger-color: #d63031;
+            --warning-color: #fdcb6e;
+            --dark-bg: #2d3436;
+            --card-bg: #ffffff;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 40px 0;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .search-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 15px 25px;
+            font-size: 1.1rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 50px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        
+        .search-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2);
+        }
+        
+        .search-btn {
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(108, 92, 231, 0.4);
+        }
+        
+        .search-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .results-section {
+            display: none;
+        }
+        
+        .stats-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .results-table {
+            background: var(--card-bg);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .table {
+            margin-bottom: 0;
+        }
+        
+        .table thead th {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 15px;
+            font-weight: 600;
+        }
+        
+        .table tbody td {
+            padding: 15px;
+            vertical-align: middle;
+        }
+        
+        .table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .badge-found {
+            background: var(--success-color);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .badge-not-found {
+            background: #e9ecef;
+            color: #666;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .badge-error {
+            background: var(--danger-color);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .site-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .site-link:hover {
+            text-decoration: underline;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: white;
+            opacity: 0.8;
+        }
+        
+        .demo-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .demo-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .demo-item:last-child {
+            border-bottom: none;
+        }
+        
+        .demo-site {
+            font-weight: 600;
+            width: 150px;
+        }
+        
+        .demo-status {
+            flex: 1;
+        }
+        
+        .demo-link {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        @media (max-width: 768px) {
+            .search-form {
+                flex-direction: column;
+            }
+            
+            .search-btn {
+                width: 100%;
+            }
+            
+            .header h1 {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1><i class="fas fa-search"></i> Sherlock</h1>
+            <p>Busca usuarios en más de 400 redes sociales</p>
+        </div>
+        
+        <!-- Search Card -->
+        <div class="search-card">
+            <form class="search-form" id="searchForm">
+                <input type="text" 
+                       class="search-input" 
+                       id="username" 
+                       name="username" 
+                       placeholder="Ingresa un nombre de usuario..." 
+                       required
+                       autocomplete="off">
+                <button type="button" class="search-btn" id="searchBtn" onclick="simulateSearch()">
+                    <i class="fas fa-search"></i> Buscar
+                </button>
+            </form>
+        </div>
+        
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <h4>Buscando en redes sociales...</h4>
+            <p>Esto puede tomar unos segundos</p>
+        </div>
+        
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <!-- Stats -->
+            <div class="stats-card">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-number" id="totalChecked">0</div>
+                            <div class="stat-label">Verificados</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-number text-success" id="foundCount">0</div>
+                            <div class="stat-label">Encontrados</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-number text-secondary" id="notFoundCount">0</div>
+                            <div class="stat-label">No Encontrados</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <div class="stat-number text-danger" id="errorCount">0</div>
+                            <div class="stat-label">Errores</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Results Table -->
+            <div class="results-table">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Sitio</th>
+                            <th>URL</th>
+                            <th>Estado</th>
+                            <th>HTTP Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- No Results Message -->
+            <div class="no-results" id="noResults" style="display: none;">
+                <i class="fas fa-info-circle fa-3x mb-3 text-muted"></i>
+                <h5>No se encontraron resultados</h5>
+                <p>Intenta con otro nombre de usuario</p>
+            </div>
+        </div>
+        
+        <!-- Demo Results -->
+        <div class="demo-card">
+            <h5><i class="fas fa-eye"></i> Vista Previa de Resultados</h5>
+            <p class="text-muted">Así se verán los resultados cuando busques un usuario:</p>
+            
+            <div class="demo-item">
+                <div class="demo-site"><i class="fab fa-github"></i> GitHub</div>
+                <div class="demo-status">
+                    <span class="badge badge-found">Encontrado</span>
+                </div>
+                <div class="demo-link">https://github.com/usuario</div>
+            </div>
+            
+            <div class="demo-item">
+                <div class="demo-site"><i class="fab fa-reddit"></i> Reddit</div>
+                <div class="demo-status">
+                    <span class="badge badge-found">Encontrado</span>
+                </div>
+                <div class="demo-link">https://reddit.com/user/usuario</div>
+            </div>
+            
+            <div class="demo-item">
+                <div class="demo-site"><i class="fab fa-twitter"></i> Twitter</div>
+                <div class="demo-status">
+                    <span class="badge badge-not-found">No Encontrado</span>
+                </div>
+                <div class="demo-link">N/A</div>
+            </div>
+            
+            <div class="demo-item">
+                <div class="demo-site"><i class="fab fa-instagram"></i> Instagram</div>
+                <div class="demo-status">
+                    <span class="badge badge-error">Bloqueado (WAF)</span>
+                </div>
+                <div class="demo-link">N/A</div>
+            </div>
+            
+            <div class="demo-item">
+                <div class="demo-site"><i class="fab fa-youtube"></i> YouTube</div>
+                <div class="demo-status">
+                    <span class="badge badge-found">Encontrado</span>
+                </div>
+                <div class="demo-link">https://youtube.com/@usuario</div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>Sherlock Project &copy; 2024 | Creado con <i class="fas fa-heart text-danger"></i></p>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function simulateSearch() {
+            const username = document.getElementById('username').value.trim();
+            if (!username) {
+                alert('Por favor ingresa un nombre de usuario');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('searchBtn').disabled = true;
+            
+            // Simulate search delay
+            setTimeout(() => {
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
+                
+                // Show demo results
+                const resultsSection = document.getElementById('resultsSection');
+                resultsSection.style.display = 'block';
+                
+                // Update stats
+                document.getElementById('totalChecked').textContent = '400+';
+                document.getElementById('foundCount').textContent = '15';
+                document.getElementById('notFoundCount').textContent = '385';
+                document.getElementById('errorCount').textContent = '0';
+                
+                // Clear previous results
+                const tbody = document.getElementById('resultsBody');
+                tbody.innerHTML = '';
+                
+                // Demo results
+                const demoResults = [
+                    { site: 'GitHub', url: `https://github.com/${username}`, status: 'CLAIMED', http: '200' },
+                    { site: 'Reddit', url: `https://reddit.com/user/${username}`, status: 'CLAIMED', http: '200' },
+                    { site: 'Twitter', url: '', status: 'AVAILABLE', http: '404' },
+                    { site: 'Instagram', url: '', status: 'WAF', http: '403' },
+                    { site: 'YouTube', url: `https://youtube.com/@${username}`, status: 'CLAIMED', http: '200' },
+                    { site: 'TikTok', url: `https://tiktok.com/@${username}`, status: 'CLAIMED', http: '200' },
+                    { site: 'LinkedIn', url: '', status: 'AVAILABLE', http: '404' },
+                    { site: 'Pinterest', url: '', status: 'AVAILABLE', http: '404' },
+                    { site: 'DeviantArt', url: `https://deviantart.com/${username}`, status: 'CLAIMED', http: '200' },
+                    { site: 'SoundCloud', url: `https://soundcloud.com/${username}`, status: 'CLAIMED', http: '200' },
+                ];
+                
+                demoResults.forEach(result => {
+                    const row = document.createElement('tr');
+                    
+                    let badgeClass = 'badge-not-found';
+                    let statusText = 'No Encontrado';
+                    if (result.status === 'CLAIMED') {
+                        badgeClass = 'badge-found';
+                        statusText = 'Encontrado';
+                    } else if (result.status === 'WAF') {
+                        badgeClass = 'badge-error';
+                        statusText = 'Bloqueado (WAF)';
+                    }
+                    
+                    row.innerHTML = `
+                        <td><strong>${result.site}</strong></td>
+                        <td>
+                            <a href="${result.url}" target="_blank" class="site-link">
+                                ${result.url || 'N/A'}
+                            </a>
+                        </td>
+                        <td><span class="badge ${badgeClass}">${statusText}</span></td>
+                        <td>${result.http}</td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+                
+                document.getElementById('searchBtn').disabled = false;
+            }, 2000);
+        }
+        
+        // Focus on input on page load
+        document.getElementById('username').focus();
+    </script>
+</body>
+</html>
