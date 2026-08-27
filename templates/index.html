@@ -816,6 +816,135 @@
             background: #27ae60;
             box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.3);
         }
+
+        /* ---- Supported sites modal ---- */
+        .sites-open-btn {
+            margin-top: 12px;
+            background: transparent;
+            border: 1px solid rgba(108, 92, 231, 0.4);
+            color: #6c5ce7;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .sites-open-btn:hover {
+            background: #6c5ce7;
+            color: #fff;
+            transform: translateY(-1px);
+        }
+        body.dark-mode .sites-open-btn {
+            color: #a29bfe;
+            border-color: rgba(162, 155, 254, 0.4);
+        }
+        body.dark-mode .sites-open-btn:hover {
+            background: #a29bfe;
+            color: #1e1e2f;
+        }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1050;
+            animation: sitesFadeIn 0.2s ease;
+        }
+        @keyframes sitesFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .sites-modal {
+            background: #fff;
+            width: min(720px, 92vw);
+            height: min(640px, 86vh);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+            animation: sitesPopIn 0.22s ease;
+        }
+        @keyframes sitesPopIn { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        body.dark-mode .sites-modal {
+            background: #1e1e2f;
+            color: #eaeaf2;
+        }
+        .sites-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            background: linear-gradient(135deg, #6c5ce7, #8e7cf3);
+            color: #fff;
+        }
+        .sites-close-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: #fff;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .sites-close-btn:hover { background: rgba(255, 255, 255, 0.35); }
+        .sites-modal-toolbar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 12px 18px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        body.dark-mode .sites-modal-toolbar { border-bottom-color: rgba(255, 255, 255, 0.1); }
+        .sites-search-input {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            font-size: 0.95rem;
+        }
+        body.dark-mode .sites-search-input {
+            background: #2a2a3d;
+            border-color: rgba(255, 255, 255, 0.15);
+            color: #eaeaf2;
+        }
+        .sites-nsfw-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+        .sites-modal-info {
+            padding: 8px 18px 0;
+            font-size: 0.85rem;
+            opacity: 0.75;
+        }
+        .sites-modal-list { flex: 1; overflow-y: auto; padding: 10px 18px 18px; }
+        .site-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+        }
+        .site-row:nth-child(even) { background: rgba(108, 92, 231, 0.06); }
+        body.dark-mode .site-row:nth-child(even) { background: rgba(162, 155, 254, 0.08); }
+        .site-row .site-name { font-weight: 600; }
+        .site-row .site-meta { font-size: 0.78rem; opacity: 0.7; }
+        .site-row .site-link { color: #6c5ce7; text-decoration: none; }
+        body.dark-mode .site-row .site-link { color: #a29bfe; }
+        .badge-nsfw {
+            background: #e17055;
+            color: #fff;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-weight: 700;
+        }
         
         .fp-filter-note {
             margin: 10px 0;
@@ -929,6 +1058,11 @@
                 <i class="fas fa-plus-circle"></i>
                 <input type="text" id="extraVariants" class="extra-variants-input"
                        placeholder="Variantes adicionales (separadas por coma): tony_x, tonyoficial, ...">
+            </div>
+            <div class="sites-link-row">
+                <button type="button" class="sites-open-btn" id="openSitesBtn">
+                    <i class="fas fa-globe"></i> Ver los {{ site_count }} sitios soportados
+                </button>
             </div>
         </div>
         
@@ -1077,6 +1211,25 @@
         </div>
     </div>
     
+    <!-- Supported Sites Modal -->
+    <div class="modal-overlay" id="sitesModal" style="display:none;">
+        <div class="sites-modal">
+            <div class="sites-modal-header">
+                <h5 style="margin:0;"><i class="fas fa-globe"></i> Sitios soportados</h5>
+                <button type="button" class="sites-close-btn" id="closeSitesBtn" title="Cerrar">&times;</button>
+            </div>
+            <div class="sites-modal-toolbar">
+                <input type="text" class="sites-search-input" id="sitesSearch" placeholder="Buscar sitio..." autocomplete="off">
+                <label class="sites-nsfw-toggle">
+                    <input type="checkbox" id="sitesNsfwCheck">
+                    <span>Ocultar NSFW</span>
+                </label>
+            </div>
+            <div class="sites-modal-info" id="sitesInfoLine">Cargando...</div>
+            <div class="sites-modal-list" id="sitesList"></div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.getElementById('searchForm').addEventListener('submit', async function(e) {
@@ -1808,6 +1961,76 @@
         
         // Focus on input on page load
         document.getElementById('username').focus();
+
+        // ---------------- Supported sites modal ----------------
+        const sitesModal = document.getElementById('sitesModal');
+        const sitesListEl = document.getElementById('sitesList');
+        const sitesSearchEl = document.getElementById('sitesSearch');
+        const sitesNsfwEl = document.getElementById('sitesNsfwCheck');
+        const sitesInfoEl = document.getElementById('sitesInfoLine');
+        let sitesCache = null;
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text == null ? '' : String(text);
+            return div.innerHTML;
+        }
+
+        function openSitesModal() {
+            sitesModal.style.display = 'flex';
+            if (!sitesCache) {
+                sitesListEl.innerHTML = '';
+                sitesInfoEl.textContent = 'Cargando sitios...';
+                fetch('/api/sites')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.success) throw new Error(data.error || 'Error desconocido');
+                        sitesCache = data.sites;
+                        renderSites();
+                    })
+                    .catch(err => {
+                        sitesListEl.innerHTML = '';
+                        sitesInfoEl.textContent = 'Error cargando sitios: ' + err.message;
+                    });
+            } else {
+                renderSites();
+            }
+        }
+
+        function closeSitesModal() {
+            sitesModal.style.display = 'none';
+        }
+
+        function renderSites() {
+            if (!sitesCache) return;
+            const q = sitesSearchEl.value.trim().toLowerCase();
+            const hideNsfw = sitesNsfwEl.checked;
+            const filtered = sitesCache.filter(s =>
+                (!hideNsfw || !s.isNSFW) &&
+                (!q || s.name.toLowerCase().includes(q) || (s.urlMain || '').toLowerCase().includes(q))
+            );
+            const nsfwCount = sitesCache.filter(s => s.isNSFW).length;
+            const regexCount = sitesCache.filter(s => s.has_regex).length;
+            sitesInfoEl.textContent = `${filtered.length} de ${sitesCache.length} sitios · ${nsfwCount} NSFW · ${regexCount} con formato restringido`;
+            sitesListEl.innerHTML = filtered.map(s => `
+                <div class="site-row">
+                    <div>
+                        <div class="site-name">${escapeHtml(s.name)} ${s.isNSFW ? '<span class="badge-nsfw">NSFW</span>' : ''}</div>
+                        <div class="site-meta">${escapeHtml(s.urlMain || '')}${s.has_regex ? ' · formato restringido' : ''} · check: ${escapeHtml(s.errorType || 'n/a')}</div>
+                    </div>
+                    <a href="${escapeHtml(s.urlMain || '#')}" target="_blank" rel="noopener noreferrer" class="site-link"><i class="fas fa-external-link-alt"></i></a>
+                </div>
+            `).join('') || '<div class="sites-modal-info">Sin resultados para tu búsqueda.</div>';
+        }
+
+        document.getElementById('openSitesBtn').addEventListener('click', openSitesModal);
+        document.getElementById('closeSitesBtn').addEventListener('click', closeSitesModal);
+        sitesModal.addEventListener('click', e => { if (e.target === sitesModal) closeSitesModal(); });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && sitesModal.style.display !== 'none') closeSitesModal();
+        });
+        sitesSearchEl.addEventListener('input', renderSites);
+        sitesNsfwEl.addEventListener('change', renderSites);
     </script>
 </body>
 </html>
