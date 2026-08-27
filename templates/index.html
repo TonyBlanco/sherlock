@@ -373,6 +373,35 @@
             color: var(--text-secondary);
         }
         
+        .comparison-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            border-radius: 10px;
+            background: var(--table-hover);
+            border: 1px solid var(--border-color);
+            font-size: 0.9rem;
+            color: var(--text-color);
+        }
+        
+        .comparison-summary .summary-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .comparison-summary .summary-value {
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .comparison-summary .summary-value.all {
+            color: var(--success-color);
+        }
+        
         .comparison-section {
             display: none;
             margin-top: 20px;
@@ -813,6 +842,7 @@
                         </button>
                     </div>
                 </div>
+                <div class="comparison-summary" id="comparisonSummary"></div>
                 <div class="comparison-table-wrap">
                     <table class="table comparison-table">
                         <thead id="comparisonHead"></thead>
@@ -1179,11 +1209,13 @@
         
         let comparisonData = [];
         let comparisonVariants = [];
+        let comparisonVariantFound = [];
         let comparisonFilterAll = false;
         
         function displayComparison(comparison, variants) {
             comparisonData = comparison;
             comparisonVariants = variants.map(v => v.username);
+            comparisonVariantFound = variants.map(v => v.found || 0);
             currentComparisonName = document.getElementById('variantFullName').textContent;
             renderComparison();
             document.getElementById('comparisonSection').style.display = 'block';
@@ -1218,6 +1250,16 @@
             
             document.getElementById('comparisonCount').textContent =
                 `Mostrando ${filtered.length} de ${comparisonData.length} sitios`;
+            
+            // Summary line: unique accounts, sites in all variants, total across variants
+            const uniqueTotal = comparisonData.length;
+            const inAllTotal = comparisonData.filter(c => c.all).length;
+            const sumTotal = comparisonVariantFound.reduce((a, b) => a + b, 0);
+            document.getElementById('comparisonSummary').innerHTML = `
+                <span class="summary-item"><i class="fas fa-users"></i> Cuentas únicas en total: <span class="summary-value">${uniqueTotal}</span></span>
+                <span class="summary-item"><i class="fas fa-check-double"></i> Presentes en todas: <span class="summary-value all">${inAllTotal}</span></span>
+                <span class="summary-item"><i class="fas fa-hashtag"></i> Suma de todas las variantes: <span class="summary-value">${sumTotal}</span></span>
+            `;
         }
         
         document.getElementById('comparisonFilterBtn').addEventListener('click', function() {
