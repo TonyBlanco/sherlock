@@ -8,6 +8,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 import subprocess
 import os
 import sys
+import json
 import csv
 import tempfile
 import shutil
@@ -147,7 +148,16 @@ def run_sherlock_search(username, timeout=10):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # Pass the real site count from data.json so the header stays accurate
+    # even after adding/removing sites.
+    site_count = 0
+    try:
+        data_path = os.path.join(SCRIPT_DIR, 'sherlock_project', 'resources', 'data.json')
+        with open(data_path, 'r', encoding='utf-8') as f:
+            site_count = len(json.load(f)) - 1  # minus the $schema key
+    except Exception:
+        pass
+    return render_template('index.html', site_count=site_count)
 
 
 @app.route('/search', methods=['POST'])
