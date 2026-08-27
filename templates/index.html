@@ -1253,7 +1253,7 @@
             if (data.success && data.async) {
                 // Fresh search runs server-side in the background (free hosting
                 // cuts requests over ~60s); poll until it is done.
-                for (let i = 0; i < 100; i++) {
+                for (let i = 0; i < 150; i++) {
                     await new Promise(r => setTimeout(r, 3000));
                     let st;
                     try {

@@ -225,7 +225,7 @@ def run_sherlock_search(username, timeout=5, skip_sites=None):
             text=True,
             cwd=work_dir,
             env=env,
-            timeout=timeout * 12 + 120,
+            timeout=timeout * 30 + 180,
         )
 
         results = []
