@@ -817,6 +817,59 @@
             box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.3);
         }
 
+        /* ---- Task menu ---- */
+        .task-menu {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin: 0 auto 8px;
+            max-width: 760px;
+        }
+        .task-tab {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #fff;
+            padding: 9px 18px;
+            border-radius: 999px;
+            font-size: 0.92rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            backdrop-filter: blur(4px);
+        }
+        .task-tab:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
+        }
+        .task-tab.active {
+            background: #fff;
+            color: #6c5ce7;
+            border-color: #fff;
+            font-weight: 700;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+        }
+        body.dark-mode .task-tab {
+            background: rgba(162, 155, 254, 0.1);
+            border-color: rgba(162, 155, 254, 0.35);
+            color: #cfcaf9;
+        }
+        body.dark-mode .task-tab:hover {
+            background: rgba(162, 155, 254, 0.22);
+        }
+        body.dark-mode .task-tab.active {
+            background: #a29bfe;
+            color: #1e1e2f;
+            border-color: #a29bfe;
+        }
+        .task-hint {
+            text-align: center;
+            color: white;
+            opacity: 0.85;
+            font-size: 0.88rem;
+            margin: 0 auto 14px;
+            max-width: 720px;
+        }
+
         /* ---- Supported sites modal ---- */
         .sites-open-btn {
             margin-top: 12px;
@@ -1071,6 +1124,23 @@
             <h1><i class="fas fa-search"></i> Sherlock</h1>
             <p>Busca usuarios en <strong>{{ site_count }}</strong> redes sociales y plataformas</p>
         </div>
+
+        <!-- Task Menu -->
+        <nav class="task-menu">
+            <button type="button" class="task-tab active" data-task="single">
+                <i class="fas fa-search"></i> Búsqueda
+            </button>
+            <button type="button" class="task-tab" data-task="variants">
+                <i class="fas fa-code-branch"></i> Variantes
+            </button>
+            <button type="button" class="task-tab" data-task="multi">
+                <i class="fas fa-users"></i> Multi-usuario
+            </button>
+            <button type="button" class="task-tab" data-task="sites">
+                <i class="fas fa-globe"></i> Sitios
+            </button>
+        </nav>
+        <div class="task-hint" id="taskHint">Busca un usuario concreto en todas las redes a la vez</div>
         
         <!-- Search Card -->
         <div class="search-card">
@@ -1288,17 +1358,19 @@
             const username = document.getElementById('username').value.trim();
             if (!username) return;
             
+            // Detect multiple usernames separated by commas / newlines first:
+            // multi wins over the variant auto-detection below (a list like
+            // "user1, user2" contains spaces but is not a name to variant-expand).
+            const isMulti = /[,;\n]/.test(username) && !username.includes('@');
             // Auto-enable variant mode for emails and names with spaces.
             // Searching a raw string with a space as a username produces broken
             // URLs like .../tony%20blanco that return false positives / null.
             const isEmail = username.includes('@');
             const hasSpace = /\s/.test(username);
-            if (isEmail || hasSpace) {
+            if ((isEmail || hasSpace) && !isMulti) {
                 document.getElementById('variantMode').checked = true;
             }
             const useVariants = document.getElementById('variantMode').checked;
-            // Detect multiple usernames separated by commas / newlines
-            const isMulti = /[,;\n]/.test(username) && !username.includes('@');
             
             // Show loading, hide results
             document.getElementById('loading').style.display = 'block';
@@ -2017,6 +2089,48 @@
         }
         variantModeCheckbox.addEventListener('change', updateExtraVariantsVisibility);
         updateExtraVariantsVisibility();
+
+        // ---------------- Task menu ----------------
+        const TASK_CONFIG = {
+            single: {
+                hint: 'Busca un usuario concreto en todas las redes a la vez',
+                placeholder: 'Usuario a buscar...',
+                variants: false,
+            },
+            variants: {
+                hint: 'Genera variantes automáticas (tonyblanco, tony_blanco, tony.blanco…) desde un nombre o email. Acepta variantes adicionales.',
+                placeholder: 'Nombre completo o email...',
+                variants: true,
+            },
+            multi: {
+                hint: 'Compara varios usuarios a la vez — sepáralos con comas: usuario1, usuario2…',
+                placeholder: 'usuario1, usuario2, usuario3...',
+                variants: false,
+            },
+        };
+
+        function setTask(task) {
+            const cfg = TASK_CONFIG[task];
+            if (!cfg) return;
+            document.querySelectorAll('.task-tab').forEach(b =>
+                b.classList.toggle('active', b.dataset.task === task));
+            variantModeCheckbox.checked = cfg.variants;
+            updateExtraVariantsVisibility();
+            document.getElementById('username').placeholder = cfg.placeholder;
+            document.getElementById('taskHint').textContent = cfg.hint;
+        }
+
+        document.querySelectorAll('.task-tab').forEach(b => {
+            b.addEventListener('click', () => {
+                if (b.dataset.task === 'sites') {
+                    openSitesModal();
+                    return;
+                }
+                setTask(b.dataset.task);
+            });
+        });
+
+        setTask('single');
         
         // Dark mode toggle
         const darkModeToggle = document.getElementById('darkModeToggle');
