@@ -469,6 +469,38 @@
             font-weight: 600;
         }
         
+        .extra-variants {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+        
+        .extra-variants-input {
+            flex: 1;
+            padding: 10px 18px;
+            font-size: 0.9rem;
+            border: 2px solid var(--input-border);
+            border-radius: 25px;
+            outline: none;
+            background: var(--card-bg);
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+        
+        .extra-variants-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2);
+        }
+        
+        body.dark-mode .extra-variants-input {
+            background: #2a2a3a;
+            color: #e0e0e0;
+        }
+        
         .history-section {
             margin-top: 20px;
         }
@@ -794,6 +826,11 @@
                 <span><i class="fas fa-code-branch"></i> Buscar variantes del nombre</span>
                 <span class="variant-hint">ej: Tony Blanco o tony.blanco@gmail.com → variantes automáticas</span>
             </label>
+            <div class="extra-variants" id="extraVariantsRow" style="display: none;">
+                <i class="fas fa-plus-circle"></i>
+                <input type="text" id="extraVariants" class="extra-variants-input"
+                       placeholder="Variantes adicionales (separadas por coma): tony_x, tonyoficial, ...">
+            </div>
         </div>
         
         <!-- Search History -->
@@ -984,12 +1021,13 @@
                     }
                 } else if (useVariants) {
                     // Start async variant search and show live progress
+                    const extraRaw = document.getElementById('extraVariants').value.trim();
                     const response = await fetch('/search-variants', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
                         },
-                        body: `fullname=${encodeURIComponent(username)}`
+                        body: `fullname=${encodeURIComponent(username)}` + (extraRaw ? `&extra=${encodeURIComponent(extraRaw)}` : '')
                     });
                     
                     const data = await response.json();
@@ -1163,6 +1201,10 @@
         let searchHistory = JSON.parse(localStorage.getItem('sherlock-history') || '[]');
         
         function saveToHistory(username) {
+            // Never store usernames that would produce broken %20 URLs
+            username = String(username || '').replace(/%20/g, ' ').replace(/\s+/g, '').trim();
+            if (!username) return;
+            
             // Find existing entry or create new
             const existing = searchHistory.find(h => h.username.toLowerCase() === username.toLowerCase());
             if (existing) {
@@ -1191,7 +1233,17 @@
             
             list.innerHTML = '';
             
-            searchHistory.forEach(item => {
+            // Skip legacy broken entries that contain spaces (they produce %20 URLs).
+            // Clicking them would re-run the raw-search path; the input sanitizer
+            // (space -> variant mode) no longer needs them.
+            const cleanHistory = searchHistory.filter(h => !/\s/.test(h.username) && !/%20/i.test(h.username));
+            
+            if (cleanHistory.length === 0) {
+                list.innerHTML = '<div class="history-empty">No hay b\u00fasquedas anteriores a\u00fan</div>';
+                return;
+            }
+            
+            cleanHistory.forEach(item => {
                 const el = document.createElement('div');
                 el.className = 'history-item';
                 el.innerHTML = `
@@ -1205,6 +1257,13 @@
                 });
                 list.appendChild(el);
             });
+            
+            // Drop legacy entries with spaces from storage too, so they don't
+            // resurface after a reload.
+            if (cleanHistory.length !== searchHistory.length) {
+                searchHistory = cleanHistory;
+                localStorage.setItem('sherlock-history', JSON.stringify(searchHistory));
+            }
         }
         
         let comparisonData = [];
@@ -1394,6 +1453,9 @@
                 results.forEach(result => {
                     const row = document.createElement('tr');
                     
+                    // Defense-in-depth: never render broken %20 URLs from old/cached data
+                    const cleanUrl = result.url_user ? result.url_user.replace(/%20/g, '_') : result.url_user;
+                    
                     // Status badge
                     let badgeClass = 'badge-not-found';
                     let statusText = 'No Encontrado';
@@ -1415,8 +1477,8 @@
                             </strong>
                         </td>
                         <td>
-                            <a href="${result.url_user}" target="_blank" class="site-link">
-                                ${result.url_user ? result.url_user.substring(0, 50) + '...' : 'N/A'}
+                            <a href="${cleanUrl}" target="_blank" class="site-link">
+                                ${cleanUrl ? cleanUrl.substring(0, 50) + '...' : 'N/A'}
                             </a>
                         </td>
                         <td><span class="badge ${badgeClass}">${statusText}</span></td>
@@ -1429,6 +1491,15 @@
             
             document.getElementById('resultsSection').style.display = 'block';
         }
+        
+        // Show/hide the extra variants field when variant mode is toggled
+        const variantModeCheckbox = document.getElementById('variantMode');
+        function updateExtraVariantsVisibility() {
+            document.getElementById('extraVariantsRow').style.display =
+                variantModeCheckbox.checked ? 'flex' : 'none';
+        }
+        variantModeCheckbox.addEventListener('change', updateExtraVariantsVisibility);
+        updateExtraVariantsVisibility();
         
         // Dark mode toggle
         const darkModeToggle = document.getElementById('darkModeToggle');

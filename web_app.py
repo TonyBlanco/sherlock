@@ -34,9 +34,40 @@ search_progress = {}      # search_id -> progress dict
 variant_final_results = {}  # search_id -> final payload
 
 
+def sanitize_username(username):
+    """Clean a username so it can never produce broken %20 URLs.
+
+    Strips surrounding whitespace, drops spaces entirely (a space in a
+    username is almost always a full-name query that should go through
+    the variant generator instead), and normalizes %20 encoded spaces
+    that may come from old cached history entries.
+    """
+    u = username.strip()
+    u = u.replace('%20', ' ').strip()
+    # Remove internal spaces -> concatenate the words (tony blanco -> tonyblanco)
+    u = re.sub(r'\s+', '', u)
+    return u
+
+
+def sanitize_result_urls(results):
+    """Replace %20 (and other encoded spaces) in result URLs.
+
+    Old searches with a literal space produced urls like
+    https://www.shelf.im/tony%20blanco which point to dead pages but are
+    marked 'Claimed'. Encoding the space as '_' keeps the link meaningful
+    without the broken %20.
+    """
+    for r in results:
+        for key in ('url_main', 'url_user'):
+            if r.get(key):
+                r[key] = r[key].replace('%20', '_')
+    return results
+
+
 def run_sherlock_search(username, timeout=10):
     """Run Sherlock search and return results as JSON"""
     try:
+        username = sanitize_username(username)
         work_dir = tempfile.mkdtemp(prefix="sherlock_")
 
         cmd = [
@@ -69,6 +100,8 @@ def run_sherlock_search(username, timeout=10):
                         'http_status': row.get('http_status', ''),
                         'response_time_s': row.get('response_time_s', '')
                     })
+
+        sanitize_result_urls(results)
 
         shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -182,6 +215,15 @@ def search_variants():
         return jsonify({'success': False, 'error': 'Nombre requerido'})
 
     variants = generate_variants(full_name)
+
+    # Optional custom variants supplied by the user (comma/newline separated)
+    extra_raw = request.form.get('extra', '').strip()
+    if extra_raw:
+        extras = [re.sub(r'\s+', '', e) for e in re.split(r'[,;\n]+', extra_raw) if e.strip()]
+        for e in extras:
+            if e and e not in variants:
+                variants.append(e)
+
     search_id = uuid.uuid4().hex
 
     search_progress[search_id] = {
@@ -449,6 +491,10 @@ def cached_results(username):
     results = last_results.get(username)
     if not results:
         return jsonify({'success': False, 'error': 'Sin resultados en caché'}), 404
+
+    # Make sure no stale %20 URLs leak out of the cache
+    results = [dict(r) for r in results]
+    sanitize_result_urls(results)
 
     stats = {
         'total_checked': len(results),
