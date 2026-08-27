@@ -28,7 +28,7 @@ last_results = {}
 last_comparison = {}
 
 
-def run_sherlock_search(username):
+def run_sherlock_search(username, timeout=10):
     """Run Sherlock search and return results as JSON"""
     try:
         work_dir = tempfile.mkdtemp(prefix="sherlock_")
@@ -36,7 +36,7 @@ def run_sherlock_search(username):
         cmd = [
             sys.executable, "-m", "sherlock_project.sherlock",
             "--local",
-            "--timeout", "10",
+            "--timeout", str(timeout),
             "--csv",
             username
         ]
@@ -178,10 +178,11 @@ def search_variants():
     variants = generate_variants(full_name)
     variant_results = []
 
-    # Run all variant searches in parallel (each spawns its own subprocess)
+    # Run all variant searches in parallel (each spawns its own subprocess).
+    # A shorter timeout keeps the parallel scan fast; slow sites get skipped.
     workers = min(len(variants), 8)
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        future_map = {executor.submit(run_sherlock_search, v): v for v in variants}
+        future_map = {executor.submit(run_sherlock_search, v, 5): v for v in variants}
         for future in as_completed(future_map):
             v = future_map[future]
             try:
@@ -247,7 +248,7 @@ def search_multi():
     multi_results = []
     workers = min(len(usernames), 8)
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        future_map = {executor.submit(run_sherlock_search, u): u for u in usernames}
+        future_map = {executor.submit(run_sherlock_search, u, 5): u for u in usernames}
         for future in as_completed(future_map):
             u = future_map[future]
             try:
