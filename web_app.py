@@ -204,6 +204,12 @@ def run_sherlock_search(username, timeout=5, skip_sites=None):
 
         cmd.append(username)
 
+        # On the weak free-instance CPU a running search can starve the web
+        # app's health checks. Run the subprocess at low priority when the OS
+        # provides `nice` so the app always wins CPU contention.
+        if os.name == 'posix' and shutil.which('nice'):
+            cmd = ['nice', '-n', '15'] + cmd
+
         # Always use the local sherlock_project copy (this project's data.json
         # with the extra sites), even if an editable install of sherlock is
         # present on PYTHONPATH (e.g. a network share).
@@ -291,22 +297,44 @@ def compute_stats(results):
     }
 
 
+_INDEX_CACHE = None
+_SITE_COUNT = None
+
+
 @app.route('/')
 def index():
-    # Pass the real site count from data.json so the header stays accurate
-    # even after adding/removing sites.
-    site_count = 0
-    data_load_error = None
-    try:
-        data_path = os.path.join(SCRIPT_DIR, 'sherlock_project', 'resources', 'data.json')
-        with open(data_path, 'r', encoding='utf-8') as f:
-            site_count = len(json.load(f)) - 1  # minus the $schema key
-    except Exception as e:
-        # Log instead of silently swallowing: a missing/corrupt data.json in a
-        # deployed container used to be invisible (site_count rendered empty).
-        data_load_error = str(e)
-        app.logger.error('Could not load data.json for site count: %s', e)
-    return render_template('index.html', site_count=site_count, data_load_error=data_load_error)
+    # Render's health check hits this route repeatedly; under a running search
+    # the free instance's CPU is saturated, so cache the rendered page (the
+    # site count only changes on redeploys) instead of re-reading data.json
+    # and re-rendering the template on every request.
+    global _INDEX_CACHE
+    if _INDEX_CACHE is not None:
+        return _INDEX_CACHE
+    site_count = get_site_count()
+    _INDEX_CACHE = render_template('index.html', site_count=site_count)
+    return _INDEX_CACHE
+
+
+def get_site_count():
+    """Number of sites in data.json, read once per process."""
+    global _SITE_COUNT
+    if _SITE_COUNT is None:
+        try:
+            data_path = os.path.join(SCRIPT_DIR, 'sherlock_project', 'resources', 'data.json')
+            with open(data_path, 'r', encoding='utf-8') as f:
+                _SITE_COUNT = len(json.load(f)) - 1  # minus the $schema key
+        except Exception as e:
+            # Log instead of silently swallowing: a missing/corrupt data.json in
+            # a deployed container used to be invisible (empty site count).
+            _SITE_COUNT = 0
+            app.logger.error('Could not load data.json for site count: %s', e)
+    return _SITE_COUNT
+
+
+@app.route('/health')
+def health():
+    """Ultra-light liveness probe (no template, no file I/O)."""
+    return 'ok', 200
 
 
 @app.route('/api/false-positives')
