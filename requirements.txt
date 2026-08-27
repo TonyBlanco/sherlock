@@ -1,4 +1,14 @@
 flask>=2.0
 requests>=2.25
+# Dependencies of the sherlock_project package itself: the search subprocess
+# does `python -m sherlock_project.sherlock`, which imports these at module
+# load (tomli via __init__.py, pandas/requests-futures/colorama via sherlock.py).
+# Without them the subprocess dies with ModuleNotFoundError in a clean container.
+requests-futures>=1.0
+tomli>=2.0
+colorama>=0.4
+PySocks>=1.7
+pandas>=2.0
+openpyxl>=3.0
 fpdf2>=2.7
 waitress>=2.1
