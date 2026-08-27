@@ -1258,6 +1258,11 @@
                     let st;
                     try {
                         const stResp = await fetch('/search-status/' + encodeURIComponent(username));
+                        if (stResp.status === 404) {
+                            // The server restarted and lost the job (free tier)
+                            alert('El servidor gratuito se reinició y perdió la búsqueda. Espera un minuto y vuelve a intentarlo.');
+                            return;
+                        }
                         if (!stResp.ok) continue;
                         st = await stResp.json();
                     } catch (err) {

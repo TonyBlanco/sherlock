@@ -5,9 +5,10 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Lower the sherlock subprocess's parallel HTTP concurrency so it stays within
-# the 512MB free-tier RAM (default is 20; 8 balances speed vs memory — only
-# one search runs at a time thanks to the async job design).
-ENV SHERLOCK_MAX_WORKERS=8
+# the 512MB free-tier RAM. 8 OOMs/starves the health check on the free
+# instance (verified: the app restarted mid-search); 4 completed a full
+# 492-site search stably. Keep at 4 unless you deploy on a bigger plan.
+ENV SHERLOCK_MAX_WORKERS=4
 ENV PYTHONUNBUFFERED=1
 
 # System deps are minimal; copy requirements first to benefit from layer cache.

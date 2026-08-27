@@ -19,6 +19,6 @@ services:
     healthCheckPath: /
     envVars:
       - key: SHERLOCK_MAX_WORKERS
-        value: 8
+        value: 4
       - key: PORT
         value: 10000
