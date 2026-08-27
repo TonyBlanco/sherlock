@@ -52,12 +52,18 @@ def _cache_path(username):
 
 
 def cache_get(username):
-    """Return (results, cached_at) from disk if fresh, else (None, None)."""
+    """Return (results, cached_at) from disk if fresh, else (None, None).
+
+    Entries with empty results are treated as missing: they used to be cached
+    when a subprocess failed, poisoning the cache with a useless 0-site reply.
+    """
     path = _cache_path(username)
     try:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         cached_at = data.get('cached_at', 0)
+        if not data.get('results'):
+            return None, None
         if time.time() - cached_at <= CACHE_TTL:
             return data['results'], cached_at
     except Exception:
@@ -229,6 +235,22 @@ def run_sherlock_search(username, timeout=6, skip_sites=None):
 
         shutil.rmtree(work_dir, ignore_errors=True)
 
+        if not results:
+            # The subprocess ran but produced no CSV. Surface everything it
+            # printed so container problems are debuggable, and never cache
+            # an empty result.
+            return {
+                'success': False,
+                'username': username,
+                'error': 'Sherlock subprocess produced no CSV',
+                'returncode': result.returncode,
+                'stdout_tail': (result.stdout or '')[-600:],
+                'stderr_tail': (result.stderr or '')[-600:],
+                'results': [],
+                'stats': compute_stats([]),
+                'cached': False,
+            }
+
         stats = compute_stats(results)
 
         # Cache results for export and future searches
@@ -267,19 +289,53 @@ def index():
     # Pass the real site count from data.json so the header stays accurate
     # even after adding/removing sites.
     site_count = 0
+    data_load_error = None
     try:
         data_path = os.path.join(SCRIPT_DIR, 'sherlock_project', 'resources', 'data.json')
         with open(data_path, 'r', encoding='utf-8') as f:
             site_count = len(json.load(f)) - 1  # minus the $schema key
-    except Exception:
-        pass
-    return render_template('index.html', site_count=site_count)
+    except Exception as e:
+        # Log instead of silently swallowing: a missing/corrupt data.json in a
+        # deployed container used to be invisible (site_count rendered empty).
+        data_load_error = str(e)
+        app.logger.error('Could not load data.json for site count: %s', e)
+    return render_template('index.html', site_count=site_count, data_load_error=data_load_error)
 
 
 @app.route('/api/false-positives')
 def api_false_positives():
     """Return the curated false-positive site list (server-managed)."""
     return jsonify({'sites': load_false_positives()})
+
+
+@app.route('/api/debug')
+def api_debug():
+    """Diagnostic endpoint: container filesystem and data.json health."""
+    info = {
+        'script_dir': SCRIPT_DIR,
+        'cwd': os.getcwd(),
+        'python': sys.executable,
+        'env_pythonpath': os.environ.get('PYTHONPATH', ''),
+        'dir_listing': sorted(os.listdir(SCRIPT_DIR)),
+    }
+    data_path = os.path.join(SCRIPT_DIR, 'sherlock_project', 'resources', 'data.json')
+    info['data_json_path'] = data_path
+    info['data_json_exists'] = os.path.exists(data_path)
+    if info['data_json_exists']:
+        info['data_json_size'] = os.path.getsize(data_path)
+        try:
+            with open(data_path, 'r', encoding='utf-8') as f:
+                d = json.load(f)
+            info['data_json_valid'] = True
+            info['data_json_sites'] = len([k for k in d if k != '$schema'])
+        except Exception as e:
+            info['data_json_valid'] = False
+            info['data_json_error'] = str(e)
+    pkg_dir = os.path.join(SCRIPT_DIR, 'sherlock_project')
+    info['sherlock_project_exists'] = os.path.isdir(pkg_dir)
+    if info['sherlock_project_exists']:
+        info['sherlock_project_listing'] = sorted(os.listdir(pkg_dir))
+    return jsonify(info)
 
 
 @app.route('/search', methods=['POST'])
