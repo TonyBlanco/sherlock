@@ -24,6 +24,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # In-memory cache for last search results
 last_results = {}
 
+# In-memory cache for the last cross-variant comparison matrix
+last_comparison = {}
+
 
 def run_sherlock_search(username):
     """Run Sherlock search and return results as JSON"""
@@ -215,6 +218,13 @@ def search_variants():
     # Sites matching in ALL variants first, then by number of matches
     comparison.sort(key=lambda c: (-c['all'], -c['count'], c['site'].lower()))
 
+    # Cache the matrix for export
+    last_comparison[full_name] = {
+        'fullname': full_name,
+        'variants': [v['username'] for v in variant_results],
+        'comparison': comparison,
+    }
+
     return jsonify({
         'success': True,
         'fullname': full_name,
@@ -260,6 +270,96 @@ def search_multi():
         'fullname': ', '.join(usernames),
         'variants': multi_results,
     })
+
+
+@app.route('/export/comparison/csv/<path:fullname>')
+def export_comparison_csv(fullname):
+    """Export the cross-variant comparison matrix as CSV."""
+    data = last_comparison.get(fullname)
+    if not data:
+        return jsonify({'error': 'No hay comparación en caché. Busca primero.'}), 404
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    header = ['Sitio'] + data['variants'] + ['Coincidencias']
+    writer.writerow(header)
+    for c in data['comparison']:
+        row = [c['site']]
+        for u in data['variants']:
+            row.append('Si' if u in c['matched'] else 'No')
+        row.append(f"{c['count']}/{len(data['variants'])}")
+        writer.writerow(row)
+
+    mem = io.BytesIO()
+    mem.write(output.getvalue().encode('utf-8'))
+    mem.seek(0)
+
+    return send_file(
+        mem,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'comparacion_{fullname}.csv'
+    )
+
+
+@app.route('/export/comparison/pdf/<path:fullname>')
+def export_comparison_pdf(fullname):
+    """Export the cross-variant comparison matrix as PDF."""
+    data = last_comparison.get(fullname)
+    if not data:
+        return jsonify({'error': 'No hay comparación en caché. Busca primero.'}), 404
+
+    variants = data['variants']
+    comparison = data['comparison']
+
+    pdf = FPDF(orientation='L')
+    pdf.add_page()
+
+    # Title
+    pdf.set_font('Helvetica', 'B', 16)
+    pdf.cell(0, 10, f'Comparaci\u00f3n entre variantes: {fullname}', new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.ln(3)
+
+    # Header
+    pdf.set_font('Helvetica', 'B', 8)
+    pdf.set_fill_color(108, 92, 231)
+    pdf.set_text_color(255, 255, 255)
+    site_w = 60
+    variant_w = max(22, int((pdf.w - pdf.l_margin - pdf.r_margin - site_w - 25) / len(variants)))
+    count_w = 25
+    pdf.cell(site_w, 8, 'Sitio', border=1, fill=True, align='C')
+    for v in variants:
+        pdf.cell(variant_w, 8, v[:16], border=1, fill=True, align='C')
+    pdf.cell(count_w, 8, 'Coincidencias', border=1, fill=True, align='C')
+    pdf.ln()
+
+    # Rows
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(0, 0, 0)
+    for c in comparison:
+        if c['all']:
+            pdf.set_fill_color(204, 251, 241)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        pdf.cell(site_w, 6, c['site'][:40], border=1, fill=True)
+        for u in variants:
+            mark = 'Si' if u in c['matched'] else ''
+            pdf.cell(variant_w, 6, mark, border=1, fill=True, align='C')
+        pdf.cell(count_w, 6, f"{c['count']}/{len(variants)}", border=1, fill=True, align='C')
+        pdf.ln()
+
+    mem = io.BytesIO()
+    pdf_bytes = pdf.output()
+    # fpdf2 returns bytearray; normalize to bytes
+    mem.write(bytes(pdf_bytes) if isinstance(pdf_bytes, (bytes, bytearray)) else pdf_bytes.encode('latin-1'))
+    mem.seek(0)
+
+    return send_file(
+        mem,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'comparacion_{fullname}.pdf'
+    )
 
 
 @app.route('/results/<username>')
@@ -376,7 +476,8 @@ def export_pdf(username):
 
     mem = io.BytesIO()
     pdf_bytes = pdf.output()
-    mem.write(pdf_bytes if isinstance(pdf_bytes, bytes) else pdf_bytes.encode('latin-1'))
+    # fpdf2 returns bytearray; normalize to bytes
+    mem.write(bytes(pdf_bytes) if isinstance(pdf_bytes, (bytes, bytearray)) else pdf_bytes.encode('latin-1'))
     mem.seek(0)
 
     return send_file(
