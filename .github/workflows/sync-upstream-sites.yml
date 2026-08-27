@@ -13,6 +13,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 concurrency:
   group: sync-upstream-sites
@@ -74,3 +75,42 @@ jobs:
             --title "Sync upstream sites ($DATE)" \
             --body-file pr_body.md \
           || echo "PR ya existía para $BRANCH — la rama se actualizó"
+
+      - name: Notify via issue
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          BRANCH=chore/sync-upstream-sites
+          PR_URL=$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url' 2>/dev/null || true)
+          if [ -z "$PR_URL" ]; then PR_URL="(sin PR abierto — revisa la ejecución del workflow)"; fi
+          {
+            echo "## 🔄 Sync upstream — $DATE"
+            echo ""
+            echo '```'
+            cat sync_result.txt
+            echo '```'
+            echo ""
+            echo "**PR:** $PR_URL"
+            echo "**Rama:** \`$BRANCH\`"
+            echo ""
+            echo "Al aceptar el PR, Render redespliega automáticamente (~2-3 min) y"
+            echo "el nuevo total aparece en la UI y en \`/api/sites\`."
+          } > issue_body.md
+
+          # Persistent tracking issue: comment on it if it exists, create it
+          # on the first occurrence. Client-side title filtering avoids GitHub
+          # search-syntax quirks with special characters.
+          ISSUE_NUM=$(gh issue list --state open --json number,title \
+            --jq '.[] | select(.title | contains("Sitios nuevos upstream")) | .number' \
+            | head -1)
+          if [ -n "$ISSUE_NUM" ]; then
+            gh issue comment "$ISSUE_NUM" --body-file issue_body.md
+            echo "Comentario añadido al issue #$ISSUE_NUM"
+          else
+            gh issue create \
+              --title "[sync-upstream] Sitios nuevos upstream" \
+              --body-file issue_body.md
+            echo "Issue de seguimiento creado"
+          fi
