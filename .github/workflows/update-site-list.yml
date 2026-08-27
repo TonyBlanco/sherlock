@@ -11,6 +11,12 @@ on:
 
 jobs:
   sync-json-data:
+    # Fork guard: this workflow pushes the generated site list to the
+    # sherlock-project organization's website repo using maintainer secrets
+    # (SSH_DEPLOY_KEY / API_TOKEN_GITHUB) that exist only upstream. Without
+    # them every data.json push fails here, so it only runs on the official
+    # repository. This fork's own sync is .github/workflows/sync-upstream-sites.yml
+    if: github.repository == 'sherlock-project/sherlock'
     # Use the latest version of Ubuntu as the runner environment
     runs-on: ubuntu-latest
 
