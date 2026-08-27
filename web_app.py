@@ -219,7 +219,7 @@ def run_sherlock_search(username, timeout=5, skip_sites=None):
             text=True,
             cwd=work_dir,
             env=env,
-            timeout=timeout * 6 + 60,
+            timeout=timeout * 12 + 120,
         )
 
         results = []
@@ -551,7 +551,7 @@ def run_variants_background(search_id):
             prog['completed'].append(entry)
         return entry
 
-    workers = min(len(variants), 8)
+    workers = min(len(variants), 4)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_map = {executor.submit(search_one, v): v for v in variants}
         for future in as_completed(future_map):
@@ -650,7 +650,7 @@ def search_multi():
         return jsonify({'success': False, 'error': 'Usernames requeridos'})
 
     multi_results = []
-    workers = min(len(usernames), 8)
+    workers = min(len(usernames), 4)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_map = {executor.submit(run_sherlock_search, u, 5): u for u in usernames}
         for future in as_completed(future_map):
