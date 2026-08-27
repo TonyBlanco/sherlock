@@ -773,6 +773,38 @@
             box-shadow: 0 5px 15px rgba(214, 48, 49, 0.4);
         }
         
+        .export-btn-filter {
+            background: #8e44ad;
+            color: white;
+        }
+        
+        .export-btn-filter:hover {
+            background: #732d91;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(142, 68, 173, 0.4);
+        }
+        
+        .export-btn-filter.active {
+            background: #27ae60;
+            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.3);
+        }
+        
+        .fp-filter-note {
+            margin: 10px 0;
+            padding: 10px 14px;
+            background: #fef9e7;
+            border-left: 4px solid #f39c12;
+            border-radius: 8px;
+            color: #7f6000;
+            font-size: 13px;
+        }
+        
+        .dark-mode .fp-filter-note {
+            background: rgba(243, 156, 18, 0.15);
+            color: #f5c04a;
+            border-left-color: #f39c12;
+        }
+        
         .footer {
             text-align: center;
             padding: 30px;
@@ -930,6 +962,9 @@
             
             <!-- Export Buttons -->
             <div class="export-buttons" id="exportButtons" style="display: none;">
+                <button class="export-btn export-btn-filter" id="filterFalsePositivesBtn" title="Ocultar sitios que devuelven 200 a cualquiera (Reddit, YouTube, Spotify...)">
+                    <i class="fas fa-broom"></i> Ocultar falsos positivos
+                </button>
                 <button class="export-btn export-btn-csv" id="exportCsvBtn">
                     <i class="fas fa-file-csv"></i> Exportar CSV
                 </button>
@@ -1414,43 +1449,52 @@
             return 'fa-solid fa-globe';
         }
         
-        function displayResults(data) {
-            const stats = data.stats;
-            const results = data.results;
-            currentUsername = data.username;
-            
-            // Save to history
-            saveToHistory(data.username);
-            
-            // Update stats
-            document.getElementById('totalChecked').textContent = stats.total_checked;
-            document.getElementById('foundCount').textContent = stats.found;
-            document.getElementById('notFoundCount').textContent = stats.not_found;
-            document.getElementById('errorCount').textContent = stats.errors;
-            
-            // Show export buttons
-            if (results.length > 0) {
-                document.getElementById('exportButtons').style.display = 'flex';
+        // Known false-positive sites: they return HTTP 200 for ANY username
+        // (generic profile page, no 404), so Sherlock marks every search as
+        // "Encontrado" on them. Compiled from live tests with non-existent
+        // usernames. The filter hides these from the table.
+        const FALSE_POSITIVE_SITES = [
+            '7Cups', 'Airliners', 'Apple Developer', 'Apple Discussions',
+            'Archive.org', 'Championat', 'Chatujme.cz', 'Codolio', 'Discord.bio',
+            'Envato Forum', 'F3.cool', 'GeeksforGeeks', 'Hashnode', 'Hubski',
+            'Instapaper', 'Odysee', 'PCGamer', 'Rarible', 'Reddit', 'Realmeye',
+            'Replit.com', 'ReverbNation', 'Shelf', 'SlideShare', 'Splice',
+            'Spotify', 'Trakt', 'TryHackMe', 'Velomania', 'Weblate',
+            'YandexMusic', 'YouTube', 'authorSTREAM', 'dailykos', 'fixya',
+            'hunting', 'interpals', 'mercadolivre', 'opennet', 'svidbook',
+        ];
+        let hideFalsePositives = false;
+        let currentResults = [];
+        let currentResultsData = null;
+        
+        document.getElementById('filterFalsePositivesBtn').addEventListener('click', function() {
+            hideFalsePositives = !hideFalsePositives;
+            this.classList.toggle('active', hideFalsePositives);
+            if (currentResultsData) {
+                renderResultsTable(currentResultsData);
             }
-            
-            // Clear previous results
+        });
+        
+        function renderResultsTable(data) {
+            const results = data.results;
             const tbody = document.getElementById('resultsBody');
             tbody.innerHTML = '';
             
-            if (results.length === 0) {
+            let visible = results;
+            let hiddenCount = 0;
+            if (hideFalsePositives) {
+                visible = results.filter(r => !FALSE_POSITIVE_SITES.includes(r.site_name));
+                hiddenCount = results.length - visible.length;
+            }
+            
+            if (visible.length === 0) {
                 document.getElementById('noResults').style.display = 'block';
                 document.querySelector('.results-table').style.display = 'none';
             } else {
                 document.getElementById('noResults').style.display = 'none';
                 document.querySelector('.results-table').style.display = 'block';
                 
-                // Sort: found first, then not found, then errors
-                results.sort((a, b) => {
-                    const order = { 'CLAIMED': 0, 'AVAILABLE': 1, 'WAF': 2, 'ILLEGAL': 3 };
-                    return (order[a.exists] || 4) - (order[b.exists] || 4);
-                });
-                
-                results.forEach(result => {
+                visible.forEach(result => {
                     const row = document.createElement('tr');
                     
                     // Defense-in-depth: never render broken %20 URLs from old/cached data
@@ -1488,6 +1532,54 @@
                     tbody.appendChild(row);
                 });
             }
+            
+            // Keep the export buttons visible while the filter is on
+            document.getElementById('exportButtons').style.display = 'flex';
+            
+            // Show a small note when sites are being hidden
+            let note = document.getElementById('fpFilterNote');
+            if (hiddenCount > 0) {
+                if (!note) {
+                    note = document.createElement('div');
+                    note.id = 'fpFilterNote';
+                    note.className = 'fp-filter-note';
+                    const exportWrap = document.getElementById('exportButtons');
+                    exportWrap.parentNode.insertBefore(note, exportWrap.nextSibling);
+                }
+                note.textContent = 'Filtro activo: ocultando ' + hiddenCount + ' sitios con falsos positivos conocidos';
+                note.style.display = 'block';
+            } else if (note) {
+                note.style.display = 'none';
+            }
+        }
+        
+        function displayResults(data) {
+            const stats = data.stats;
+            const results = data.results;
+            currentUsername = data.username;
+            currentResultsData = data;
+            
+            // Save to history
+            saveToHistory(data.username);
+            
+            // Update stats
+            document.getElementById('totalChecked').textContent = stats.total_checked;
+            document.getElementById('foundCount').textContent = stats.found;
+            document.getElementById('notFoundCount').textContent = stats.not_found;
+            document.getElementById('errorCount').textContent = stats.errors;
+            
+            // Show export buttons
+            if (results.length > 0) {
+                document.getElementById('exportButtons').style.display = 'flex';
+            }
+            
+            // Sort once: found first, then not found, then errors
+            results.sort((a, b) => {
+                const order = { 'CLAIMED': 0, 'AVAILABLE': 1, 'WAF': 2, 'ILLEGAL': 3 };
+                return (order[a.exists] || 4) - (order[b.exists] || 4);
+            });
+            
+            renderResultsTable(data);
             
             document.getElementById('resultsSection').style.display = 'block';
         }
