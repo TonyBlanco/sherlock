@@ -917,6 +917,19 @@
             font-size: 0.9rem;
             white-space: nowrap;
         }
+        .sites-type-select {
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            font-size: 0.9rem;
+            background: #fff;
+            cursor: pointer;
+        }
+        body.dark-mode .sites-type-select {
+            background: #2a2a3d;
+            border-color: rgba(255, 255, 255, 0.15);
+            color: #eaeaf2;
+        }
         .sites-modal-info {
             padding: 8px 18px 0;
             font-size: 0.85rem;
@@ -1220,6 +1233,12 @@
             </div>
             <div class="sites-modal-toolbar">
                 <input type="text" class="sites-search-input" id="sitesSearch" placeholder="Buscar sitio..." autocomplete="off">
+                <select class="sites-type-select" id="sitesTypeSelect" title="Filtrar por tipo de verificación">
+                    <option value="">Todos los checks</option>
+                    <option value="status_code">status_code (329)</option>
+                    <option value="message">message (135)</option>
+                    <option value="response_url">response_url (28)</option>
+                </select>
                 <label class="sites-nsfw-toggle">
                     <input type="checkbox" id="sitesNsfwCheck">
                     <span>Ocultar NSFW</span>
@@ -1967,6 +1986,13 @@
         const sitesListEl = document.getElementById('sitesList');
         const sitesSearchEl = document.getElementById('sitesSearch');
         const sitesNsfwEl = document.getElementById('sitesNsfwCheck');
+        const sitesTypeEl = document.getElementById('sitesTypeSelect');
+
+        // errorType may be a string or an array in data.json; normalize here.
+        function siteTypes(s) {
+            if (Array.isArray(s.errorType)) return s.errorType;
+            return s.errorType ? [s.errorType] : [];
+        }
         const sitesInfoEl = document.getElementById('sitesInfoLine');
         let sitesCache = null;
 
@@ -2005,8 +2031,10 @@
             if (!sitesCache) return;
             const q = sitesSearchEl.value.trim().toLowerCase();
             const hideNsfw = sitesNsfwEl.checked;
+            const typeSel = sitesTypeEl.value;
             const filtered = sitesCache.filter(s =>
                 (!hideNsfw || !s.isNSFW) &&
+                (!typeSel || siteTypes(s).includes(typeSel)) &&
                 (!q || s.name.toLowerCase().includes(q) || (s.urlMain || '').toLowerCase().includes(q))
             );
             const nsfwCount = sitesCache.filter(s => s.isNSFW).length;
@@ -2016,7 +2044,7 @@
                 <div class="site-row">
                     <div>
                         <div class="site-name">${escapeHtml(s.name)} ${s.isNSFW ? '<span class="badge-nsfw">NSFW</span>' : ''}</div>
-                        <div class="site-meta">${escapeHtml(s.urlMain || '')}${s.has_regex ? ' · formato restringido' : ''} · check: ${escapeHtml(s.errorType || 'n/a')}</div>
+                        <div class="site-meta">${escapeHtml(s.urlMain || '')}${s.has_regex ? ' · formato restringido' : ''} · check: ${escapeHtml(siteTypes(s).join(' + ') || 'n/a')}</div>
                     </div>
                     <a href="${escapeHtml(s.urlMain || '#')}" target="_blank" rel="noopener noreferrer" class="site-link"><i class="fas fa-external-link-alt"></i></a>
                 </div>
@@ -2031,6 +2059,7 @@
         });
         sitesSearchEl.addEventListener('input', renderSites);
         sitesNsfwEl.addEventListener('change', renderSites);
+        sitesTypeEl.addEventListener('change', renderSites);
     </script>
 </body>
 </html>
