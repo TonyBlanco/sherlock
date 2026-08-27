@@ -4,10 +4,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Lower the sherlock subprocess's parallel HTTP concurrency so it stays within
-# the 512MB free-tier RAM. 8 and 4 both ended with the instance restarting
-# mid-search (~75-90s in); 2 is the diagnostic setting under test.
-ENV SHERLOCK_MAX_WORKERS=2
+# Parallel HTTP concurrency of the sherlock subprocess. The OOM that killed
+# searches ~90s in was fixed by releasing each site's future after processing
+# (peak RSS now ~100MB flat on the free instance); 6 workers balances speed
+# (~45-60s per full 492-site search) against in-flight response buffering.
+ENV SHERLOCK_MAX_WORKERS=6
 ENV PYTHONUNBUFFERED=1
 
 # System deps are minimal; copy requirements first to benefit from layer cache.
