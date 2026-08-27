@@ -18,7 +18,6 @@ except ImportError:
 
 import csv
 import signal
-import pandas as pd
 import os
 import re
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
@@ -930,6 +929,11 @@ def main():
                 url_user.append(results[site]["url_user"])
                 exists.append(str(results[site]["status"].status))
                 http_status.append(results[site]["http_status"])
+
+            # Imported lazily: pandas (plus numpy) costs significant RAM per
+            # subprocess and is only needed for xlsx output, which the web UI
+            # never uses.
+            import pandas as pd
 
             DataFrame = pd.DataFrame(
                 {
