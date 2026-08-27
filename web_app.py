@@ -157,7 +157,7 @@ def sanitize_result_urls(results):
     return results
 
 
-def run_sherlock_search(username, timeout=5, skip_sites=None):
+def run_sherlock_search(username, timeout=5, skip_sites=None, job=None):
     """Run Sherlock search and return results as JSON.
 
     Uses the on-disk cache when a fresh result already exists.
@@ -219,14 +219,28 @@ def run_sherlock_search(username, timeout=5, skip_sites=None):
         local_root = SCRIPT_DIR
         env['PYTHONPATH'] = local_root + os.pathsep + env.get('PYTHONPATH', '')
 
-        result = subprocess.run(
+        # Launch with Popen (not subprocess.run) so a running search can be
+        # cancelled: the handle is exposed via `job` and /search-cancel
+        # terminates the process on demand.
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             cwd=work_dir,
             env=env,
-            timeout=timeout * 30 + 180,
         )
+        if job is not None:
+            job['process'] = proc
+        stdout = stderr = ''
+        timed_out = False
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout * 30 + 180)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            proc.kill()
+            stdout, stderr = proc.communicate()
+        returncode = proc.returncode
 
         results = []
         csv_file = os.path.join(work_dir, f"{username}.csv")
@@ -248,6 +262,18 @@ def run_sherlock_search(username, timeout=5, skip_sites=None):
 
         shutil.rmtree(work_dir, ignore_errors=True)
 
+        if job is not None and job.get('cancel_requested'):
+            shutil.rmtree(work_dir, ignore_errors=True)
+            return {
+                'success': False,
+                'canceled': True,
+                'username': username,
+                'error': 'Búsqueda cancelada por el usuario',
+                'results': [],
+                'stats': compute_stats([]),
+                'cached': False,
+            }
+
         if not results:
             # The subprocess ran but produced no CSV. Surface everything it
             # printed so container problems are debuggable, and never cache
@@ -255,10 +281,10 @@ def run_sherlock_search(username, timeout=5, skip_sites=None):
             return {
                 'success': False,
                 'username': username,
-                'error': 'Sherlock subprocess produced no CSV',
-                'returncode': result.returncode,
-                'stdout_tail': (result.stdout or '')[-600:],
-                'stderr_tail': (result.stderr or '')[-600:],
+                'error': 'Sherlock subprocess timed out' if timed_out else 'Sherlock subprocess produced no CSV',
+                'returncode': returncode,
+                'stdout_tail': (stdout or '')[-600:],
+                'stderr_tail': (stderr or '')[-600:],
                 'results': [],
                 'stats': compute_stats([]),
                 'cached': False,
@@ -461,15 +487,44 @@ def search():
         job = single_searches.get(username)
         if job and job['status'] == 'running':
             return jsonify({'success': True, 'async': True, 'username': username})
-        single_searches[username] = {'status': 'running', 'result': None}
+        job = {'status': 'running', 'result': None}
+        single_searches[username] = job
 
-    def _worker():
-        res = run_sherlock_search(username)
+    def _worker(j):
+        res = run_sherlock_search(username, job=j)
         with _single_search_lock:
-            single_searches[username] = {'status': 'done', 'result': res}
+            if j.get('cancel_requested'):
+                j['status'] = 'canceled'
+                j['result'] = {
+                    'success': False,
+                    'canceled': True,
+                    'username': username,
+                    'error': 'Búsqueda cancelada',
+                }
+            else:
+                j['status'] = 'done'
+                j['result'] = res
 
-    threading.Thread(target=_worker, daemon=True).start()
+    threading.Thread(target=_worker, args=(job,), daemon=True).start()
     return jsonify({'success': True, 'async': True, 'username': username})
+
+
+@app.route('/search-cancel/<username>', methods=['POST'])
+def search_cancel(username):
+    """Cancel a running single search: flag the job and kill its subprocess."""
+    username = sanitize_username(username)
+    with _single_search_lock:
+        job = single_searches.get(username)
+        if not job or job['status'] != 'running':
+            return jsonify({'success': False, 'error': 'No hay búsqueda en curso'}), 404
+        job['cancel_requested'] = True
+        proc = job.get('process')
+    if proc is not None:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    return jsonify({'success': True, 'status': 'cancelling', 'username': username})
 
 
 @app.route('/search-status/<username>')
@@ -497,6 +552,8 @@ def search_status(username):
         return jsonify({'success': False, 'error': 'Búsqueda no encontrada'}), 404
     if job['status'] == 'running':
         return jsonify({'success': True, 'status': 'running'})
+    if job['status'] == 'canceled':
+        return jsonify({'success': True, 'status': 'canceled'})
     return jsonify({'success': True, 'status': 'done', 'result': job['result']})
 
 
@@ -612,7 +669,19 @@ def run_variants_background(search_id):
     lock = threading.Lock()
 
     def search_one(v):
-        res = run_sherlock_search(v, 5)
+        if prog.get('cancel_requested'):
+            entry = {
+                'username': v, 'found': 0, 'checked': 0, 'success': False,
+                'error': 'cancelada', 'cached': False, 'canceled': True,
+            }
+            with lock:
+                variant_results.append(entry)
+                prog['completed'].append(entry)
+            return entry
+        j = {'status': 'running'}
+        with lock:
+            prog.setdefault('jobs', {})[v] = j
+        res = run_sherlock_search(v, 5, job=j)
         entry = {
             'username': v,
             'found': res.get('stats', {}).get('found', 0),
@@ -660,6 +729,7 @@ def run_variants_background(search_id):
         'fullname': full_name,
         'variants': variant_results,
         'comparison': comparison,
+        'canceled': bool(prog.get('cancel_requested')),
     }
 
     # Cache the matrix for export
@@ -670,7 +740,7 @@ def run_variants_background(search_id):
     }
 
     variant_final_results[search_id] = payload
-    prog['status'] = 'done'
+    prog['status'] = 'canceled' if prog.get('cancel_requested') else 'done'
 
 
 @app.route('/search-progress/<search_id>')
@@ -702,6 +772,26 @@ def search_progress_endpoint(search_id):
         'completed': len(prog['completed']),
         'variants': variants_list,
     })
+
+
+@app.route('/search-cancel-variants/<search_id>', methods=['POST'])
+def search_cancel_variants(search_id):
+    """Cancel a running variant search: stop queued variants and kill the
+    subprocesses of the ones already in flight."""
+    prog = search_progress.get(search_id)
+    if not prog or prog.get('status') != 'running':
+        return jsonify({'success': False, 'error': 'No hay búsqueda de variantes en curso'}), 404
+    prog['cancel_requested'] = True
+    killed = 0
+    for j in (prog.get('jobs') or {}).values():
+        p = j.get('process')
+        if p is not None:
+            try:
+                p.terminate()
+                killed += 1
+            except Exception:
+                pass
+    return jsonify({'success': True, 'status': 'cancelling', 'killed': killed})
 
 
 @app.route('/search-variants-result/<search_id>')

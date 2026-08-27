@@ -936,6 +936,30 @@
             opacity: 0.75;
         }
         .sites-modal-list { flex: 1; overflow-y: auto; padding: 10px 18px 18px; }
+        .cancel-search-btn {
+            margin-left: 12px;
+            background: rgba(231, 76, 60, 0.12);
+            border: 1px solid rgba(231, 76, 60, 0.5);
+            color: #e74c3c;
+            padding: 6px 14px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            vertical-align: middle;
+        }
+        .cancel-search-btn:hover {
+            background: #e74c3c;
+            color: #fff;
+        }
+        body.dark-mode .cancel-search-btn {
+            color: #ff7675;
+            border-color: rgba(255, 118, 117, 0.5);
+        }
+        body.dark-mode .cancel-search-btn:hover {
+            background: #e74c3c;
+            color: #fff;
+        }
         .site-row {
             display: flex;
             align-items: center;
@@ -1099,7 +1123,11 @@
         <!-- Variants Summary -->
         <div class="variants-summary" id="variantsSummary">
             <div class="variants-card">
-                <h5><i class="fas fa-code-branch"></i> <span id="variantTitle">Variantes de</span> <span id="variantFullName"></span></h5>
+                <h5><i class="fas fa-code-branch"></i> <span id="variantTitle">Variantes de</span> <span id="variantFullName"></span>
+                    <button type="button" class="cancel-search-btn" id="cancelVariantsBtn" style="display:none;">
+                        <i class="fas fa-stop-circle"></i> Cancelar
+                    </button>
+                </h5>
                 <div class="variant-grid" id="variantGrid"></div>
             </div>
         </div>
@@ -1140,6 +1168,9 @@
             <div class="spinner"></div>
             <h4>Buscando en redes sociales...</h4>
             <p>Esto puede tomar unos segundos</p>
+            <button type="button" class="cancel-search-btn" id="cancelSearchBtn" style="display:none;">
+                <i class="fas fa-stop-circle"></i> Cancelar búsqueda
+            </button>
         </div>
         
         <!-- Results Section -->
@@ -1315,6 +1346,9 @@
                     
                     if (data.success) {
                         showVariantProgress(data);
+                        currentSearchId = data.search_id;
+                        variantsCancelRequested = false;
+                        document.getElementById('cancelVariantsBtn').style.display = 'inline-block';
                         const final = await pollVariantProgress(data.search_id);
                         displayVariants(final);
                         // Auto-load the best variant's full results
@@ -1386,20 +1420,66 @@
         }
         
         async function pollVariantProgress(searchId) {
-            while (true) {
-                const resp = await fetch('/search-progress/' + searchId);
-                const prog = await resp.json();
-                if (prog.success) {
-                    updateProgressPills(prog);
-                    if (prog.status === 'done') {
-                        const finalResp = await fetch('/search-variants-result/' + searchId);
-                        return await finalResp.json();
+            // Safety cap (~15 min at 1.5s). Stops cleanly when the job is lost
+            // (404: the container restarted mid-search) or cancelled.
+            for (let i = 0; i < 600; i++) {
+                let resp;
+                try {
+                    resp = await fetch('/search-progress/' + searchId);
+                } catch (err) {
+                    await new Promise(r => setTimeout(r, 1500));
+                    continue;
+                }
+                if (resp.status === 404) {
+                    hideCancelButtons();
+                    throw new Error('El servidor se reinició y perdió la búsqueda de variantes. Inténtalo de nuevo.');
+                }
+                if (resp.ok) {
+                    const prog = await resp.json();
+                    if (prog.success) {
+                        updateProgressPills(prog);
+                        if (prog.status === 'done' || prog.status === 'canceled') {
+                            hideCancelButtons();
+                            const finalResp = await fetch('/search-variants-result/' + searchId);
+                            if (!finalResp.ok) {
+                                throw new Error('El servidor perdió los resultados de la búsqueda de variantes.');
+                            }
+                            return await finalResp.json();
+                        }
                     }
                 }
                 await new Promise(r => setTimeout(r, 1500));
             }
+            hideCancelButtons();
+            throw new Error('La búsqueda de variantes tardó demasiado. Inténtalo de nuevo.');
         }
         
+        // ---------------- Cancellable searches ----------------
+        let currentSearchUser = null;
+        let searchCancelRequested = false;
+        let currentSearchId = null;
+        let variantsCancelRequested = false;
+
+        function hideCancelButtons() {
+            document.getElementById('cancelSearchBtn').style.display = 'none';
+            document.getElementById('cancelVariantsBtn').style.display = 'none';
+        }
+
+        function cancelCurrentSearch() {
+            if (!currentSearchUser) return;
+            searchCancelRequested = true;
+            fetch('/search-cancel/' + encodeURIComponent(currentSearchUser), { method: 'POST' }).catch(() => {});
+        }
+
+        function cancelCurrentVariants() {
+            if (!currentSearchId) return;
+            variantsCancelRequested = true;
+            fetch('/search-cancel-variants/' + encodeURIComponent(currentSearchId), { method: 'POST' }).catch(() => {});
+        }
+
+        document.getElementById('cancelSearchBtn').addEventListener('click', cancelCurrentSearch);
+        document.getElementById('cancelVariantsBtn').addEventListener('click', cancelCurrentVariants);
+
         async function loadSingleSearch(username) {
             // Fast path: variant searches already cached the full results
             const cachedResp = await fetch('/results/' + encodeURIComponent(username));
@@ -1425,13 +1505,22 @@
             if (data.success && data.async) {
                 // Fresh search runs server-side in the background (free hosting
                 // cuts requests over ~60s); poll until it is done.
+                currentSearchUser = username;
+                searchCancelRequested = false;
+                document.getElementById('cancelSearchBtn').style.display = 'inline-block';
                 for (let i = 0; i < 150; i++) {
+                    if (searchCancelRequested) {
+                        hideCancelButtons();
+                        alert('Búsqueda cancelada.');
+                        return;
+                    }
                     await new Promise(r => setTimeout(r, 3000));
                     let st;
                     try {
                         const stResp = await fetch('/search-status/' + encodeURIComponent(username));
                         if (stResp.status === 404) {
                             // The server restarted and lost the job (free tier)
+                            hideCancelButtons();
                             alert('El servidor gratuito se reinició y perdió la búsqueda. Espera un minuto y vuelve a intentarlo.');
                             return;
                         }
@@ -1440,11 +1529,18 @@
                     } catch (err) {
                         continue;
                     }
+                    if (st.success && st.status === 'canceled') {
+                        hideCancelButtons();
+                        alert('Búsqueda cancelada.');
+                        return;
+                    }
                     if (st.success && st.status === 'done') {
+                        hideCancelButtons();
                         displayResults(st.result);
                         return;
                     }
                 }
+                hideCancelButtons();
                 alert('La búsqueda está tardando demasiado. Vuelve a intentarlo en un minuto: los resultados quedaron guardados.');
                 return;
             }
