@@ -501,8 +501,112 @@
             color: #e0e0e0;
         }
         
-        .history-section {
-            margin-top: 20px;
+        /* ---- History & comparison dedicated pages ---- */
+        .history-page-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            max-width: 760px;
+            margin: 0 auto;
+        }
+        .history-page-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .history-page-toolbar h5 {
+            margin: 0;
+            color: var(--text-color);
+            font-weight: 600;
+            margin-right: auto;
+        }
+        .history-search-input {
+            flex: 1;
+            min-width: 170px;
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--input-border);
+            background: var(--card-bg);
+            color: var(--text-color);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        .history-search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+        }
+        .history-fav-filter {
+            background: none;
+            border: 1px solid var(--warning-color);
+            color: var(--text-secondary);
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+        .history-fav-filter:hover {
+            background: var(--warning-color);
+            color: #6b4e00;
+        }
+        .history-fav-filter.active {
+            background: var(--warning-color);
+            border-color: var(--warning-color);
+            color: #6b4e00;
+            font-weight: 700;
+        }
+        .history-item .history-star,
+        .history-item .history-del {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 4px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+        .history-item .history-star:hover {
+            color: var(--warning-color);
+            transform: scale(1.15);
+        }
+        .history-item.fav .history-star {
+            color: var(--warning-color);
+        }
+        .history-item.fav {
+            border-color: var(--warning-color);
+        }
+        .history-item .history-del:hover {
+            color: var(--danger-color);
+            transform: scale(1.15);
+        }
+        .history-item:hover .history-star,
+        .history-item:hover .history-del {
+            color: rgba(255, 255, 255, 0.85);
+        }
+        .history-item.fav:hover .history-star {
+            color: #ffe9a8;
+        }
+        .comparison-empty {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 45px 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            max-width: 760px;
+            margin: 0 auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .comparison-empty i {
+            color: var(--secondary-color);
+            margin-bottom: 14px;
+        }
+        .comparison-empty h5 {
+            color: var(--text-color);
+            margin-bottom: 8px;
         }
         
         .history-card {
@@ -825,6 +929,17 @@
             justify-content: center;
             margin: 0 auto 8px;
             max-width: 760px;
+            position: sticky;
+            top: 8px;
+            z-index: 900;
+            background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+            padding: 8px 14px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(108, 92, 231, 0.35);
+        }
+        body.dark-mode .task-menu {
+            background: linear-gradient(135deg, #2d2d44 0%, #3d3d5c 100%);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
         }
         .task-tab {
             background: rgba(255, 255, 255, 0.12);
@@ -1136,12 +1251,20 @@
             <button type="button" class="task-tab" data-task="multi">
                 <i class="fas fa-users"></i> Multi-usuario
             </button>
+            <button type="button" class="task-tab" data-task="history">
+                <i class="fas fa-history"></i> Historial
+            </button>
+            <button type="button" class="task-tab" data-task="comparison">
+                <i class="fas fa-layer-group"></i> Comparación
+            </button>
             <button type="button" class="task-tab" data-task="sites">
                 <i class="fas fa-globe"></i> Sitios
             </button>
         </nav>
         <div class="task-hint" id="taskHint">Busca un usuario concreto en todas las redes a la vez</div>
         
+        <!-- Search page (form + variants + results) -->
+        <div id="searchPage">
         <!-- Search Card -->
         <div class="search-card">
             <form class="search-form" id="searchForm">
@@ -1173,23 +1296,7 @@
             </div>
         </div>
         
-        <!-- Search History -->
-        <div class="history-section" id="historySection">
-            <div class="history-card">
-                <div class="history-header">
-                    <h5><i class="fas fa-history"></i> Historial de Búsquedas</h5>
-                    <button class="history-clear-btn" id="clearHistoryBtn">
-                        <i class="fas fa-trash-alt"></i> Limpiar
-                    </button>
-                </div>
-                <div class="history-list" id="historyList">
-                    <div class="history-empty" id="historyEmpty">
-                        No hay búsquedas anteriores aún
-                    </div>
-                </div>
-            </div>
-        </div>
-        
+
         <!-- Variants Summary -->
         <div class="variants-summary" id="variantsSummary">
             <div class="variants-card">
@@ -1199,37 +1306,6 @@
                     </button>
                 </h5>
                 <div class="variant-grid" id="variantGrid"></div>
-            </div>
-        </div>
-        
-        <!-- Cross-Variant Comparison -->
-        <div class="comparison-section" id="comparisonSection">
-            <div class="variants-card">
-                <div class="comparison-header">
-                    <h5>
-                        <i class="fas fa-layer-group"></i> Comparación entre variantes
-                        <span class="match-all-badge">✓ = presente en TODAS</span>
-                    </h5>
-                    <div class="comparison-export-buttons">
-                        <span class="comparison-count" id="comparisonCount"></span>
-                        <button class="comparison-filter-btn" id="comparisonFilterBtn">
-                            <i class="fas fa-filter"></i> Solo TODAS
-                        </button>
-                        <button class="comparison-export-btn export-btn-csv" id="exportComparisonCsvBtn">
-                            <i class="fas fa-file-csv"></i> CSV
-                        </button>
-                        <button class="comparison-export-btn export-btn-pdf" id="exportComparisonPdfBtn">
-                            <i class="fas fa-file-pdf"></i> PDF
-                        </button>
-                    </div>
-                </div>
-                <div class="comparison-summary" id="comparisonSummary"></div>
-                <div class="comparison-table-wrap">
-                    <table class="table comparison-table">
-                        <thead id="comparisonHead"></thead>
-                        <tbody id="comparisonBody"></tbody>
-                    </table>
-                </div>
             </div>
         </div>
         
@@ -1318,6 +1394,67 @@
                 <p>Intenta con otro nombre de usuario</p>
             </div>
         </div>
+        </div><!-- /searchPage -->
+
+        <!-- Comparison page -->
+        <div id="comparisonPage" style="display: none;">
+            <div class="comparison-empty" id="comparisonEmpty" style="display: none;">
+                <i class="fas fa-layer-group fa-3x"></i>
+                <h5>Aún no hay comparaciones</h5>
+                <p>Ejecuta una búsqueda por <strong>Variantes</strong> y la matriz aparecerá aquí automáticamente.</p>
+            </div>
+            <!-- Cross-Variant Comparison -->
+            <div class="comparison-section" id="comparisonSection" style="display: none;">
+                <div class="variants-card">
+                    <div class="comparison-header">
+                        <h5>
+                            <i class="fas fa-layer-group"></i> Comparación entre variantes
+                            <span class="match-all-badge">✓ = presente en TODAS</span>
+                        </h5>
+                        <div class="comparison-export-buttons">
+                            <span class="comparison-count" id="comparisonCount"></span>
+                            <button class="comparison-filter-btn" id="comparisonFilterBtn">
+                                <i class="fas fa-filter"></i> Solo TODAS
+                            </button>
+                            <button class="comparison-export-btn export-btn-csv" id="exportComparisonCsvBtn">
+                                <i class="fas fa-file-csv"></i> CSV
+                            </button>
+                            <button class="comparison-export-btn export-btn-pdf" id="exportComparisonPdfBtn">
+                                <i class="fas fa-file-pdf"></i> PDF
+                            </button>
+                        </div>
+                    </div>
+                    <div class="comparison-summary" id="comparisonSummary"></div>
+                    <div class="comparison-table-wrap">
+                        <table class="table comparison-table">
+                            <thead id="comparisonHead"></thead>
+                            <tbody id="comparisonBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History page -->
+        <div id="historyPage" style="display: none;">
+            <div class="history-page-card">
+                <div class="history-page-toolbar">
+                    <h5><i class="fas fa-history"></i> Historial de Búsquedas</h5>
+                    <input type="text" class="history-search-input" id="historySearch" placeholder="Buscar en el historial..." autocomplete="off">
+                    <button type="button" class="history-fav-filter" id="historyFavBtn">
+                        <i class="far fa-star"></i> Solo favoritos
+                    </button>
+                    <button type="button" class="history-clear-btn" id="clearHistoryBtn">
+                        <i class="fas fa-trash-alt"></i> Limpiar todo
+                    </button>
+                </div>
+                <div class="history-list" id="historyList">
+                    <div class="history-empty" id="historyEmpty">
+                        No hay búsquedas anteriores aún
+                    </div>
+                </div>
+            </div>
+        </div>
         
         <!-- Footer -->
         <div class="footer">
@@ -1357,6 +1494,13 @@
             
             const username = document.getElementById('username').value.trim();
             if (!username) return;
+
+            // A search always plays out on the search page (e.g. clicking a
+            // history entry while on another tab). Keep the current task
+            // config; only bring the page back.
+            if (currentPage !== 'search') {
+                setTask(TASK_CONFIG[currentTask] ? currentTask : 'single');
+            }
             
             // Detect multiple usernames separated by commas / newlines first:
             // multi wins over the variant auto-detection below (a list like
@@ -1703,46 +1847,66 @@
         
         function renderHistory() {
             const list = document.getElementById('historyList');
-            
+
+            // Skip legacy broken entries that contain spaces (they produce %20 URLs).
+            const cleanHistory = searchHistory.filter(h => !/\s/.test(h.username) && !/%20/i.test(h.username));
+            if (cleanHistory.length !== searchHistory.length) {
+                searchHistory = cleanHistory;
+                localStorage.setItem('sherlock-history', JSON.stringify(searchHistory));
+            }
+
             if (searchHistory.length === 0) {
                 list.innerHTML = '<div class="history-empty" id="historyEmpty">No hay b\u00fasquedas anteriores a\u00fan</div>';
                 return;
             }
-            
-            list.innerHTML = '';
-            
-            // Skip legacy broken entries that contain spaces (they produce %20 URLs).
-            // Clicking them would re-run the raw-search path; the input sanitizer
-            // (space -> variant mode) no longer needs them.
-            const cleanHistory = searchHistory.filter(h => !/\s/.test(h.username) && !/%20/i.test(h.username));
-            
-            if (cleanHistory.length === 0) {
-                list.innerHTML = '<div class="history-empty">No hay b\u00fasquedas anteriores a\u00fan</div>';
+
+            let items = searchHistory.filter(h =>
+                (!historyFavOnly || h.fav) &&
+                (!historyFilterText || h.username.toLowerCase().includes(historyFilterText)));
+
+            if (items.length === 0) {
+                list.innerHTML = '<div class="history-empty">' +
+                    (historyFavOnly ? 'Sin favoritos tod\u00eda — marca una b\u00fasqueda con la estrella'
+                                    : 'Ninguna b\u00fasqueda coincide con tu filtro') +
+                    '</div>';
                 return;
             }
-            
-            cleanHistory.forEach(item => {
+
+            // Favorites float to the top, then most recent first
+            items = items.slice().sort((a, b) =>
+                ((b.fav ? 1 : 0) - (a.fav ? 1 : 0)) ||
+                (new Date(b.lastSearch) - new Date(a.lastSearch)));
+
+            list.innerHTML = '';
+            items.forEach(item => {
                 const el = document.createElement('div');
-                el.className = 'history-item';
+                el.className = 'history-item' + (item.fav ? ' fav' : '');
                 el.innerHTML = `
+                    <button type="button" class="history-star" title="${item.fav ? 'Quitar de favoritos' : 'Marcar como favorito'}"><i class="${item.fav ? 'fas' : 'far'} fa-star"></i></button>
                     <i class="fas fa-user"></i>
-                    <span>${item.username}</span>
+                    <span>${escapeHtml(item.username)}</span>
                     ${item.cachedAt ? '<i class="fas fa-bolt history-bolt" title="Resultados guardados"></i>' : ''}
                     <span class="history-count">${item.count}</span>
+                    <button type="button" class="history-del" title="Borrar del historial"><i class="fas fa-times"></i></button>
                 `;
+                el.querySelector('.history-star').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    item.fav = !item.fav;
+                    localStorage.setItem('sherlock-history', JSON.stringify(searchHistory));
+                    renderHistory();
+                });
+                el.querySelector('.history-del').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    searchHistory = searchHistory.filter(h => h !== item);
+                    localStorage.setItem('sherlock-history', JSON.stringify(searchHistory));
+                    renderHistory();
+                });
                 el.addEventListener('click', function() {
                     document.getElementById('username').value = item.username;
                     document.getElementById('searchForm').dispatchEvent(new Event('submit'));
                 });
                 list.appendChild(el);
             });
-            
-            // Drop legacy entries with spaces from storage too, so they don't
-            // resurface after a reload.
-            if (cleanHistory.length !== searchHistory.length) {
-                searchHistory = cleanHistory;
-                localStorage.setItem('sherlock-history', JSON.stringify(searchHistory));
-            }
         }
         
         let comparisonData = [];
@@ -1757,6 +1921,38 @@
             currentComparisonName = document.getElementById('variantFullName').textContent;
             renderComparison();
             document.getElementById('comparisonSection').style.display = 'block';
+            // Persist so the Comparación tab can reopen it later (even after reload)
+            try {
+                localStorage.setItem('sherlock-last-comparison', JSON.stringify({
+                    name: currentComparisonName,
+                    variants: comparisonVariants,
+                    found: comparisonVariantFound,
+                    data: comparisonData,
+                    savedAt: new Date().toISOString()
+                }));
+            } catch (e) { /* storage full — the matrix still shows this session */ }
+            // Jump straight to the comparison so nobody has to scroll for it
+            setTask('comparison');
+        }
+
+        let lastComparisonSnapshot = null;
+        try {
+            lastComparisonSnapshot = JSON.parse(localStorage.getItem('sherlock-last-comparison') || 'null');
+        } catch (e) { lastComparisonSnapshot = null; }
+
+        function restoreLastComparison() {
+            if (comparisonData.length === 0 && lastComparisonSnapshot &&
+                Array.isArray(lastComparisonSnapshot.data) && lastComparisonSnapshot.data.length) {
+                comparisonData = lastComparisonSnapshot.data;
+                comparisonVariants = lastComparisonSnapshot.variants || [];
+                comparisonVariantFound = lastComparisonSnapshot.found || comparisonVariants.map(() => 0);
+                currentComparisonName = lastComparisonSnapshot.name || '';
+                document.getElementById('variantFullName').textContent = currentComparisonName;
+                renderComparison();
+                document.getElementById('comparisonSection').style.display = 'block';
+            }
+            document.getElementById('comparisonEmpty').style.display =
+                (comparisonData.length > 0 && document.getElementById('comparisonSection').style.display !== 'none') ? 'none' : 'block';
         }
         
         function renderComparison() {
@@ -1813,7 +2009,22 @@
         }
         
         document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
-        
+
+        // Dedicated history page: live search + favorites filter
+        let historyFilterText = '';
+        let historyFavOnly = false;
+
+        document.getElementById('historySearch').addEventListener('input', function() {
+            historyFilterText = this.value.trim().toLowerCase();
+            renderHistory();
+        });
+
+        document.getElementById('historyFavBtn').addEventListener('click', function() {
+            historyFavOnly = !historyFavOnly;
+            this.classList.toggle('active', historyFavOnly);
+            renderHistory();
+        });
+
         // Initial render
         renderHistory();
         
@@ -2109,15 +2320,33 @@
             },
         };
 
+        let currentTask = 'single';
+        let currentPage = 'search';
+
         function setTask(task) {
             const cfg = TASK_CONFIG[task];
-            if (!cfg) return;
+            const page = (task === 'history') ? 'history'
+                       : (task === 'comparison') ? 'comparison'
+                       : 'search';
+            currentTask = task;
+            currentPage = page;
             document.querySelectorAll('.task-tab').forEach(b =>
                 b.classList.toggle('active', b.dataset.task === task));
-            variantModeCheckbox.checked = cfg.variants;
-            updateExtraVariantsVisibility();
-            document.getElementById('username').placeholder = cfg.placeholder;
-            document.getElementById('taskHint').textContent = cfg.hint;
+            if (cfg) {
+                variantModeCheckbox.checked = cfg.variants;
+                updateExtraVariantsVisibility();
+                document.getElementById('username').placeholder = cfg.placeholder;
+                document.getElementById('taskHint').textContent = cfg.hint;
+            } else if (task === 'history') {
+                document.getElementById('taskHint').textContent = 'Reejecuta, busca o marca con una estrella tus búsquedas anteriores';
+            } else if (task === 'comparison') {
+                document.getElementById('taskHint').textContent = 'Matriz de tu última búsqueda por variantes — qué sitios aparecen en todas';
+            }
+            document.getElementById('searchPage').style.display = (page === 'search') ? 'block' : 'none';
+            document.getElementById('historyPage').style.display = (page === 'history') ? 'block' : 'none';
+            document.getElementById('comparisonPage').style.display = (page === 'comparison') ? 'block' : 'none';
+            if (page === 'comparison') restoreLastComparison();
+            if (page === 'history') renderHistory();
         }
 
         document.querySelectorAll('.task-tab').forEach(b => {
