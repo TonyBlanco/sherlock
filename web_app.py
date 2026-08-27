@@ -78,11 +78,21 @@ def run_sherlock_search(username, timeout=10):
             username
         ]
 
+        # Always use the local sherlock_project copy (this project's data.json
+        # with the extra sites), even if an editable install of sherlock is
+        # present on PYTHONPATH (e.g. a network share).
+        env = dict(os.environ)
+        # The sherlock_project package lives next to web_app.py, so its parent
+        # (the directory containing the package) IS SCRIPT_DIR itself.
+        local_root = SCRIPT_DIR
+        env['PYTHONPATH'] = local_root + os.pathsep + env.get('PYTHONPATH', '')
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=work_dir
+            cwd=work_dir,
+            env=env
         )
 
         results = []
