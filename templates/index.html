@@ -805,6 +805,45 @@
             border-left-color: #f39c12;
         }
         
+        .fp-warning-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 6px;
+            padding: 3px 10px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .fp-warning-badge:hover {
+            background: #fde68a;
+            transform: translateY(-1px);
+        }
+        
+        .dark-mode .fp-warning-badge {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fcd34d;
+            border-color: #f59e0b;
+        }
+        
+        .fp-warning-badge.hidden-badge {
+            background: #d1fae5;
+            color: #065f46;
+            border-color: #10b981;
+        }
+        
+        .dark-mode .fp-warning-badge.hidden-badge {
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+            border-color: #10b981;
+        }
+        
         .footer {
             text-align: center;
             padding: 30px;
@@ -943,6 +982,9 @@
                         <div class="stat-item">
                             <div class="stat-number text-success" id="foundCount">0</div>
                             <div class="stat-label">Encontrados</div>
+                            <button class="fp-warning-badge" id="fpWarningBadge" style="display: none;" title="Estos sitios devuelven HTTP 200 a cualquier usuario, así que no son verificaciones fiables. Haz clic para ocultarlos de la tabla.">
+                                <i class="fas fa-exclamation-triangle fp-badge-icon"></i> <span id="fpWarningCount">0 sospechosos</span>
+                            </button>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -1475,6 +1517,15 @@
             }
         });
         
+        // The warning badge on the stats also toggles the filter (both ways)
+        document.getElementById('fpWarningBadge').addEventListener('click', function() {
+            hideFalsePositives = !hideFalsePositives;
+            document.getElementById('filterFalsePositivesBtn').classList.toggle('active', hideFalsePositives);
+            if (currentResultsData) {
+                renderResultsTable(currentResultsData);
+            }
+        });
+        
         function renderResultsTable(data) {
             const results = data.results;
             const tbody = document.getElementById('resultsBody');
@@ -1531,6 +1582,29 @@
                     
                     tbody.appendChild(row);
                 });
+            }
+            
+            // Warning badge: how many of the "Encontrados" come from sites
+            // known to return 200 for any username (likely false positives)
+            const suspicious = results.filter(r =>
+                (r.exists === 'CLAIMED' || r.exists === 'Claimed') &&
+                FALSE_POSITIVE_SITES.includes(r.site_name)
+            ).length;
+            const badge = document.getElementById('fpWarningBadge');
+            if (suspicious > 0) {
+                // Update in place, keeping the count span (id fpWarningCount)
+                badge.classList.toggle('hidden-badge', hideFalsePositives);
+                badge.style.display = 'inline-flex';
+                const icon = badge.querySelector('.fp-badge-icon');
+                const countSpan = document.getElementById('fpWarningCount');
+                if (icon) {
+                    icon.className = hideFalsePositives ? 'fas fa-check-circle fp-badge-icon' : 'fas fa-exclamation-triangle fp-badge-icon';
+                }
+                if (countSpan) {
+                    countSpan.textContent = suspicious + (hideFalsePositives ? ' ocultos' : ' sospechosos');
+                }
+            } else {
+                badge.style.display = 'none';
             }
             
             // Keep the export buttons visible while the filter is on
