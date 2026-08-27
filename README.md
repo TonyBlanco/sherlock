@@ -74,6 +74,10 @@ sitio: el pico de RSS bajó de **535MB → 57MB** medido.
    workflow crea/actualiza la rama `chore/sync-upstream-sites` y abre un PR
    titulado `Sync upstream sites (fecha)` con el resumen del diff. Si no hay
    cambios, no hace nada ("Already in sync").
+   Además **notifica por issue**: comenta en el issue persistente
+   "[sync-upstream] Sitios nuevos upstream" (lo crea si aún no existe) con el
+   resumen, el enlace al PR y el recordatorio de que aceptarlo redespliega
+   Render.
 3. **Revisión** — El PR se revisa a mano: el diff debe mostrar **solo
    añadidos** (los sitios propios — Facebook, Weibo, Threads, Tagged… —
    jamás se eliminan) y opcionalmente entradas refrescadas.
