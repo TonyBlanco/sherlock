@@ -332,6 +332,36 @@
             transform: translateY(-2px);
         }
         
+        .comparison-filter-btn {
+            padding: 6px 16px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 2px solid var(--border-color);
+            background: transparent;
+            color: var(--text-color);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .comparison-filter-btn:hover {
+            border-color: var(--primary-color);
+        }
+        
+        .comparison-filter-btn.active {
+            background: var(--success-color);
+            border-color: var(--success-color);
+            color: white;
+        }
+        
+        .comparison-count {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
         .comparison-section {
             display: none;
             margin-top: 20px;
@@ -760,6 +790,10 @@
                         <span class="match-all-badge">✓ = presente en TODAS</span>
                     </h5>
                     <div class="comparison-export-buttons">
+                        <span class="comparison-count" id="comparisonCount"></span>
+                        <button class="comparison-filter-btn" id="comparisonFilterBtn">
+                            <i class="fas fa-filter"></i> Solo TODAS
+                        </button>
                         <button class="comparison-export-btn export-btn-csv" id="exportComparisonCsvBtn">
                             <i class="fas fa-file-csv"></i> CSV
                         </button>
@@ -1069,19 +1103,32 @@
             });
         }
         
+        let comparisonData = [];
+        let comparisonVariants = [];
+        let comparisonFilterAll = false;
+        
         function displayComparison(comparison, variants) {
-            const section = document.getElementById('comparisonSection');
+            comparisonData = comparison;
+            comparisonVariants = variants.map(v => v.username);
             currentComparisonName = document.getElementById('variantFullName').textContent;
+            renderComparison();
+            document.getElementById('comparisonSection').style.display = 'block';
+        }
+        
+        function renderComparison() {
             const head = document.getElementById('comparisonHead');
             const body = document.getElementById('comparisonBody');
-            const unames = variants.map(v => v.username);
+            const unames = comparisonVariants;
             
             head.innerHTML = '<tr><th>Sitio</th>' +
                 unames.map(u => `<th>${u}</th>`).join('') +
                 '<th>Coincidencias</th></tr>';
             
             body.innerHTML = '';
-            comparison.forEach(c => {
+            
+            const filtered = comparisonFilterAll ? comparisonData.filter(c => c.all) : comparisonData;
+            
+            filtered.forEach(c => {
                 const tr = document.createElement('tr');
                 if (c.all) tr.classList.add('match-all');
                 
@@ -1090,13 +1137,20 @@
                     const yes = c.matched.includes(u);
                     cells += `<td class="cell-center"><span class="${yes ? 'check-yes' : 'check-no'}">${yes ? '✓' : '✗'}</span></td>`;
                 });
-                cells += `<td class="cell-center"><strong>${c.count}/${variants.length}</strong></td>`;
+                cells += `<td class="cell-center"><strong>${c.count}/${unames.length}</strong></td>`;
                 tr.innerHTML = cells;
                 body.appendChild(tr);
             });
             
-            section.style.display = 'block';
+            document.getElementById('comparisonCount').textContent =
+                `Mostrando ${filtered.length} de ${comparisonData.length} sitios`;
         }
+        
+        document.getElementById('comparisonFilterBtn').addEventListener('click', function() {
+            comparisonFilterAll = !comparisonFilterAll;
+            this.classList.toggle('active', comparisonFilterAll);
+            renderComparison();
+        });
         
         function clearHistory() {
             searchHistory = [];
