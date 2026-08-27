@@ -283,6 +283,17 @@
             background: rgba(0, 184, 148, 0.12);
         }
         
+        .variant-pill.pending {
+            border-style: dashed;
+            opacity: 0.8;
+        }
+        
+        .variant-pill .pill-spinner {
+            color: var(--primary-color);
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        
         .variant-pill.found .variant-check {
             color: var(--success-color);
         }
@@ -942,7 +953,7 @@
                         alert('Error: ' + data.error);
                     }
                 } else if (useVariants) {
-                    // Search all variants of the full name
+                    // Start async variant search and show live progress
                     const response = await fetch('/search-variants', {
                         method: 'POST',
                         headers: {
@@ -954,9 +965,11 @@
                     const data = await response.json();
                     
                     if (data.success) {
-                        displayVariants(data);
+                        showVariantProgress(data);
+                        const final = await pollVariantProgress(data.search_id);
+                        displayVariants(final);
                         // Auto-load the best variant's full results
-                        const best = data.variants.find(v => v.found > 0);
+                        const best = final.variants.find(v => v.found > 0);
                         if (best) {
                             await loadSingleSearch(best.username);
                         } else {
@@ -976,6 +989,67 @@
                 document.getElementById('searchBtn').disabled = false;
             }
         });
+        
+        function showVariantProgress(data) {
+            // Render the variant pills immediately with a pending/spinner state
+            const grid = document.getElementById('variantGrid');
+            const summary = document.getElementById('variantsSummary');
+            grid.innerHTML = '';
+            document.getElementById('variantTitle').textContent = 'Variantes de';
+            document.getElementById('variantFullName').textContent = document.getElementById('username').value.trim();
+            document.getElementById('comparisonSection').style.display = 'none';
+            
+            data.variants.forEach(v => {
+                const pill = document.createElement('div');
+                pill.className = 'variant-pill pending';
+                pill.dataset.username = v.username;
+                pill.innerHTML = `
+                    <i class="fas fa-circle-notch fa-spin pill-spinner"></i>
+                    <span class="variant-name">${v.username}</span>
+                    <span class="variant-count">Verificando...</span>
+                `;
+                grid.appendChild(pill);
+            });
+            
+            summary.style.display = 'block';
+        }
+        
+        function updateProgressPills(prog) {
+            prog.variants.forEach(v => {
+                const pill = document.querySelector(`.variant-pill[data-username="${v.username}"]`);
+                if (!pill) return;
+                if (v.status === 'done') {
+                    // Idempotent: only convert the spinner once, update the count every time
+                    if (!pill.classList.contains('found')) {
+                        pill.classList.remove('pending');
+                        pill.classList.add('found');
+                        const spinner = pill.querySelector('.pill-spinner');
+                        if (spinner) {
+                            spinner.outerHTML = '<i class="fas fa-check-circle variant-check"></i>';
+                        }
+                    }
+                    const count = pill.querySelector('.variant-count');
+                    if (count) count.textContent = v.found + ' encontrados';
+                } else {
+                    pill.classList.add('pending');
+                }
+            });
+        }
+        
+        async function pollVariantProgress(searchId) {
+            while (true) {
+                const resp = await fetch('/search-progress/' + searchId);
+                const prog = await resp.json();
+                if (prog.success) {
+                    updateProgressPills(prog);
+                    if (prog.status === 'done') {
+                        const finalResp = await fetch('/search-variants-result/' + searchId);
+                        return await finalResp.json();
+                    }
+                }
+                await new Promise(r => setTimeout(r, 1500));
+            }
+        }
         
         async function loadSingleSearch(username) {
             // Fast path: variant searches already cached the full results

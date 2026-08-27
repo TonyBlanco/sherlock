@@ -14,6 +14,8 @@ import shutil
 import io
 import re
 import unicodedata
+import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fpdf import FPDF
 
@@ -26,6 +28,10 @@ last_results = {}
 
 # In-memory cache for the last cross-variant comparison matrix
 last_comparison = {}
+
+# Live progress for asynchronous variant searches
+search_progress = {}      # search_id -> progress dict
+variant_final_results = {}  # search_id -> final payload
 
 
 def run_sherlock_search(username, timeout=10):
@@ -170,34 +176,67 @@ def generate_variants(full_name):
 
 @app.route('/search-variants', methods=['POST'])
 def search_variants():
-    """Search a full name across all its username variants."""
+    """Start a variant search in the background and return a search_id."""
     full_name = request.form.get('fullname', '').strip()
     if not full_name:
         return jsonify({'success': False, 'error': 'Nombre requerido'})
 
     variants = generate_variants(full_name)
-    variant_results = []
+    search_id = uuid.uuid4().hex
 
-    # Run all variant searches in parallel (each spawns its own subprocess).
-    # A shorter timeout keeps the parallel scan fast; slow sites get skipped.
+    search_progress[search_id] = {
+        'status': 'running',
+        'fullname': full_name,
+        'total': len(variants),
+        'completed': [],
+        'variants': variants,
+    }
+
+    threading.Thread(
+        target=run_variants_background,
+        args=(search_id,),
+        daemon=True,
+    ).start()
+
+    return jsonify({
+        'success': True,
+        'search_id': search_id,
+        'total': len(variants),
+        'variants': [{'username': v, 'status': 'pending', 'found': 0} for v in variants],
+    })
+
+
+def run_variants_background(search_id):
+    """Run all variant searches in parallel, updating live progress."""
+    prog = search_progress[search_id]
+    full_name = prog['fullname']
+    variants = prog['variants']
+    variant_results = []
+    lock = threading.Lock()
+
+    def search_one(v):
+        res = run_sherlock_search(v, 5)
+        entry = {
+            'username': v,
+            'found': res.get('stats', {}).get('found', 0),
+            'checked': res.get('stats', {}).get('total_checked', 0),
+            'success': res.get('success', False),
+            'error': res.get('error'),
+        }
+        with lock:
+            variant_results.append(entry)
+            prog['completed'].append(entry)
+        return entry
+
     workers = min(len(variants), 8)
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        future_map = {executor.submit(run_sherlock_search, v, 5): v for v in variants}
+        future_map = {executor.submit(search_one, v): v for v in variants}
         for future in as_completed(future_map):
-            v = future_map[future]
             try:
-                res = future.result()
-            except Exception as e:
-                res = {'success': False, 'error': str(e)}
-            variant_results.append({
-                'username': v,
-                'found': res.get('stats', {}).get('found', 0),
-                'checked': res.get('stats', {}).get('total_checked', 0),
-                'success': res.get('success', False),
-                'error': res.get('error'),
-            })
+                future.result()
+            except Exception:
+                pass
 
-    # Sort: found desc
     variant_results.sort(key=lambda v: v['found'], reverse=True)
 
     # Cross-variant comparison: which sites match across ALL variants
@@ -216,8 +255,14 @@ def search_variants():
             'all': len(successful) > 0 and len(matched) == len(successful),
             'count': len(matched),
         })
-    # Sites matching in ALL variants first, then by number of matches
     comparison.sort(key=lambda c: (-c['all'], -c['count'], c['site'].lower()))
+
+    payload = {
+        'success': True,
+        'fullname': full_name,
+        'variants': variant_results,
+        'comparison': comparison,
+    }
 
     # Cache the matrix for export
     last_comparison[full_name] = {
@@ -226,12 +271,47 @@ def search_variants():
         'comparison': comparison,
     }
 
+    variant_final_results[search_id] = payload
+    prog['status'] = 'done'
+
+
+@app.route('/search-progress/<search_id>')
+def search_progress_endpoint(search_id):
+    """Return live progress for an async variant search."""
+    prog = search_progress.get(search_id)
+    if not prog:
+        return jsonify({'success': False, 'error': 'Búsqueda no encontrada'}), 404
+
+    variants_list = []
+    for v in prog['variants']:
+        done = next((c for c in prog['completed'] if c['username'] == v), None)
+        if done:
+            variants_list.append({
+                'username': v,
+                'status': 'done',
+                'found': done['found'],
+            })
+        else:
+            variants_list.append({'username': v, 'status': 'pending', 'found': 0})
+
     return jsonify({
         'success': True,
-        'fullname': full_name,
-        'variants': variant_results,
-        'comparison': comparison,
+        'search_id': search_id,
+        'status': prog['status'],
+        'fullname': prog['fullname'],
+        'total': prog['total'],
+        'completed': len(prog['completed']),
+        'variants': variants_list,
     })
+
+
+@app.route('/search-variants-result/<search_id>')
+def search_variants_result(search_id):
+    """Return the final result of a completed async variant search."""
+    payload = variant_final_results.get(search_id)
+    if not payload:
+        return jsonify({'success': False, 'error': 'Resultado no listo'}), 404
+    return jsonify(payload)
 
 
 @app.route('/search-multi', methods=['POST'])
