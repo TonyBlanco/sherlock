@@ -212,6 +212,33 @@ def sherlock(
     # Normal requests
     underlying_session = requests.session()
 
+    # Reject and never store cookies. With ~490 different hosts the shared
+    # session's cookiejar accumulated every site's cookies, and requests'
+    # per-request cookie merging deep-copies that jar for every request,
+    # growing memory linearly (measured: ~500MB over one full run, OOM-killing
+    # 512MB containers ~90s in). These are single-shot existence checks: no
+    # site needs cookies from another site.
+    import http.cookiejar as _cookiejar
+
+    class _NoCookies(_cookiejar.CookiePolicy):
+        netscape = True
+        rfc2965 = False
+        hide_cookie2 = False
+
+        def set_ok(self, cookie, request):
+            return False
+
+        def return_ok(self, cookie, request):
+            return False
+
+        def domain_return_ok(self, domain, request):
+            return False
+
+        def path_return_ok(self, path, request):
+            return False
+
+    underlying_session.cookies.set_policy(_NoCookies())
+
     # Limit number of workers to 20 by default (this is probably vastly
     # overkill). Allowed to be lowered via the SHERLOCK_MAX_WORKERS env var so
     # constrained environments (e.g. a 512MB free-tier container) can keep the
@@ -366,6 +393,12 @@ def sherlock(
         r, error_text, exception_text = get_response(
             request_future=future, error_type=error_type, social_network=social_network
         )
+        # Release the future immediately: a completed Future retains its whole
+        # Response (raw body, headers, connection). With ~490 sites stored in
+        # site_data for the entire run, keeping every future alive held
+        # hundreds of MB of finished responses and OOM-killed 512MB containers
+        # ~90s into each search (measured ~1MB retained per site).
+        net_info["request_future"] = None
 
         # Get response time for response of our request.
         try:
