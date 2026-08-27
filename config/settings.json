@@ -1,0 +1,6 @@
+{
+  "_comentario": "Configuracion del servidor web de Sherlock.",
+  "skip_sites": [
+  ],
+  "_skip_sites_nota": "Sitios que se saltan en cada busqueda para ahorrar tiempo (los que siempre dan 403/WAF o estan caidos). Dejalo vacio para verificar siempre los 492 sitios. Ejemplo: [\"Instagram\", \"Discord\", \"Roblox\"]"
+}

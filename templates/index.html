@@ -573,6 +573,16 @@
             color: white;
         }
         
+        .history-bolt {
+            color: var(--accent-teal, #38b2ac);
+            font-size: 0.8rem;
+            margin-left: -4px;
+        }
+        
+        .history-item:hover .history-bolt {
+            color: #d1faf5;
+        }
+        
         .history-count {
             background: var(--border-color);
             color: var(--text-secondary);
@@ -596,6 +606,24 @@
         
         .results-section {
             display: none;
+        }
+        
+        .cached-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(56, 178, 172, 0.12);
+            border: 1px solid var(--accent-teal, #38b2ac);
+            color: var(--accent-teal, #38b2ac);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .cached-indicator i {
+            font-size: 0.9rem;
         }
         
         .stats-card {
@@ -969,6 +997,10 @@
         
         <!-- Results Section -->
         <div class="results-section" id="resultsSection">
+            <!-- Cached indicator -->
+            <div class="cached-indicator" id="cachedIndicator" style="display: none;">
+                <i class="fas fa-bolt"></i> Resultados de la caché <span id="cachedAtText"></span>
+            </div>
             <!-- Stats -->
             <div class="stats-card">
                 <div class="row">
@@ -1277,7 +1309,7 @@
         // Search History
         let searchHistory = JSON.parse(localStorage.getItem('sherlock-history') || '[]');
         
-        function saveToHistory(username) {
+        function saveToHistory(username, cachedAt) {
             // Never store usernames that would produce broken %20 URLs
             username = String(username || '').replace(/%20/g, ' ').replace(/\s+/g, '').trim();
             if (!username) return;
@@ -1287,11 +1319,13 @@
             if (existing) {
                 existing.count++;
                 existing.lastSearch = new Date().toISOString();
+                if (cachedAt) existing.cachedAt = cachedAt;
             } else {
                 searchHistory.unshift({
                     username: username,
                     count: 1,
-                    lastSearch: new Date().toISOString()
+                    lastSearch: new Date().toISOString(),
+                    cachedAt: cachedAt || null
                 });
             }
             // Keep max 20 entries
@@ -1326,6 +1360,7 @@
                 el.innerHTML = `
                     <i class="fas fa-user"></i>
                     <span>${item.username}</span>
+                    ${item.cachedAt ? '<i class="fas fa-bolt history-bolt" title="Resultados guardados"></i>' : ''}
                     <span class="history-count">${item.count}</span>
                 `;
                 el.addEventListener('click', function() {
@@ -1493,9 +1528,10 @@
         
         // Known false-positive sites: they return HTTP 200 for ANY username
         // (generic profile page, no 404), so Sherlock marks every search as
-        // "Encontrado" on them. Compiled from live tests with non-existent
-        // usernames. The filter hides these from the table.
-        const FALSE_POSITIVE_SITES = [
+        // "Encontrado" on them. The list is managed server-side in
+        // config/false_positives.json and fetched here (with a fallback so the
+        // UI still works offline / if the endpoint is down).
+        let FALSE_POSITIVE_SITES = [
             '7Cups', 'Airliners', 'Apple Developer', 'Apple Discussions',
             'Archive.org', 'Championat', 'Chatujme.cz', 'Codolio', 'Discord.bio',
             'Envato Forum', 'F3.cool', 'GeeksforGeeks', 'Hashnode', 'Hubski',
@@ -1505,6 +1541,11 @@
             'YandexMusic', 'YouTube', 'authorSTREAM', 'dailykos', 'fixya',
             'hunting', 'interpals', 'mercadolivre', 'opennet', 'svidbook',
         ];
+        // Load the server-managed list (fall back to the list above on failure)
+        fetch('/api/false-positives')
+            .then(r => r.json())
+            .then(d => { if (d && Array.isArray(d.sites) && d.sites.length > 0) FALSE_POSITIVE_SITES = d.sites; })
+            .catch(() => {});
         let hideFalsePositives = false;
         let currentResults = [];
         let currentResultsData = null;
@@ -1633,8 +1674,23 @@
             currentUsername = data.username;
             currentResultsData = data;
             
-            // Save to history
-            saveToHistory(data.username);
+            // Show the cached-results indicator when served from disk cache
+            const cachedIndicator = document.getElementById('cachedIndicator');
+            if (data.cached) {
+                const span = document.getElementById('cachedAtText');
+                if (data.cached_at) {
+                    const mins = Math.max(1, Math.round((Date.now() / 1000 - data.cached_at) / 60));
+                    span.textContent = `(guardados hace ${mins} min)`;
+                } else {
+                    span.textContent = '';
+                }
+                cachedIndicator.style.display = 'inline-flex';
+            } else {
+                cachedIndicator.style.display = 'none';
+            }
+            
+            // Save to history (with cached timestamp for the lightning icon)
+            saveToHistory(data.username, data.cached ? (data.cached_at || Date.now() / 1000) : null);
             
             // Update stats
             document.getElementById('totalChecked').textContent = stats.total_checked;

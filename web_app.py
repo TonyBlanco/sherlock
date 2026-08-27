@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Sherlock Web Interface
-A simple Flask web application to search for usernames across social networks.
+A Flask web application to search for usernames across social networks.
 """
 
 from flask import Flask, render_template, request, jsonify, send_file
@@ -14,6 +14,7 @@ import tempfile
 import shutil
 import io
 import re
+import time
 import unicodedata
 import threading
 import uuid
@@ -24,7 +25,17 @@ app = Flask(__name__)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# In-memory cache for last search results
+# ---------------------------------------------------------------------------
+# Persistent on-disk result cache
+# ---------------------------------------------------------------------------
+# Each search is stored as cache/<username>.json with the full results plus a
+# timestamp. A repeated search for the same username within CACHE_TTL is served
+# instantly from disk instead of re-checking 490+ sites.
+CACHE_DIR = os.path.join(SCRIPT_DIR, 'cache')
+CACHE_TTL = 8 * 3600          # 8 hours
+CACHE_MAX_ENTRIES = 100       # drop the oldest entries beyond this
+
+# In-memory cache for last search results (export + fast variant path)
 last_results = {}
 
 # In-memory cache for the last cross-variant comparison matrix
@@ -33,6 +44,74 @@ last_comparison = {}
 # Live progress for asynchronous variant searches
 search_progress = {}      # search_id -> progress dict
 variant_final_results = {}  # search_id -> final payload
+
+
+def _cache_path(username):
+    safe = re.sub(r'[^a-zA-Z0-9_.\-]', '_', username)
+    return os.path.join(CACHE_DIR, f'{safe}.json')
+
+
+def cache_get(username):
+    """Return (results, cached_at) from disk if fresh, else (None, None)."""
+    path = _cache_path(username)
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        cached_at = data.get('cached_at', 0)
+        if time.time() - cached_at <= CACHE_TTL:
+            return data['results'], cached_at
+    except Exception:
+        pass
+    return None, None
+
+
+def cache_put(username, results):
+    """Write results to disk cache, pruning the oldest entries when full."""
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        data = {'username': username, 'cached_at': time.time(), 'results': results}
+        with open(_cache_path(username), 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+    # Prune oldest entries beyond the cap
+    try:
+        entries = []
+        for name in os.listdir(CACHE_DIR):
+            if name.endswith('.json'):
+                p = os.path.join(CACHE_DIR, name)
+                entries.append((os.path.getmtime(p), p))
+        if len(entries) > CACHE_MAX_ENTRIES:
+            entries.sort()
+            for _, p in entries[:len(entries) - CACHE_MAX_ENTRIES]:
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def load_config():
+    """Load config/settings.json (blocked sites to skip, etc.)."""
+    cfg_path = os.path.join(SCRIPT_DIR, 'config', 'settings.json')
+    try:
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def load_false_positives():
+    """Load the curated false-positive site list from disk."""
+    fp_path = os.path.join(SCRIPT_DIR, 'config', 'false_positives.json')
+    try:
+        with open(fp_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get('sites', [])
+    except Exception:
+        return []
 
 
 def sanitize_username(username):
@@ -65,23 +144,52 @@ def sanitize_result_urls(results):
     return results
 
 
-def run_sherlock_search(username, timeout=10):
-    """Run Sherlock search and return results as JSON"""
+def run_sherlock_search(username, timeout=6, skip_sites=None):
+    """Run Sherlock search and return results as JSON.
+
+    Uses the on-disk cache when a fresh result already exists.
+    """
+    username = sanitize_username(username)
+
+    # Fast path: fresh cached results on disk
+    cached, cached_at = cache_get(username)
+    if cached is not None:
+        results = sanitize_result_urls([dict(r) for r in cached])
+        last_results[username] = results
+        stats = compute_stats(results)
+        return {
+            'success': True,
+            'username': username,
+            'results': results,
+            'stats': stats,
+            'cached': True,
+            'cached_at': cached_at,
+        }
+
     try:
-        username = sanitize_username(username)
         work_dir = tempfile.mkdtemp(prefix="sherlock_")
 
         cmd = [
             sys.executable, "-m", "sherlock_project.sherlock",
             "--local",
+            "--no-update-check",
             "--timeout", str(timeout),
             # print_found defaults to True in Sherlock, which makes the CSV only
             # contain Claimed sites. We want every site so the UI can show
             # found/not-found/error counts accurately.
             "--print-all",
             "--csv",
-            username
         ]
+
+        # Optional: skip sites known to be dead/blocked (speed).
+        # The skip list is configured in config/settings.json under "skip_sites"
+        # and defaults to empty so totals always reflect the full site list.
+        skip_sites = skip_sites if skip_sites is not None else load_config().get('skip_sites', [])
+        if skip_sites:
+            cmd.append("--site-list")
+            cmd.append(','.join(skip_sites))
+
+        cmd.append(username)
 
         # Always use the local sherlock_project copy (this project's data.json
         # with the extra sites), even if an editable install of sherlock is
@@ -97,7 +205,8 @@ def run_sherlock_search(username, timeout=10):
             capture_output=True,
             text=True,
             cwd=work_dir,
-            env=env
+            env=env,
+            timeout=timeout * 6 + 60,
         )
 
         results = []
@@ -120,21 +229,19 @@ def run_sherlock_search(username, timeout=10):
 
         shutil.rmtree(work_dir, ignore_errors=True)
 
-        stats = {
-            'total_checked': len(results),
-            'found': sum(1 for r in results if r['exists'] == 'Claimed'),
-            'not_found': sum(1 for r in results if r['exists'] == 'Available'),
-            'errors': sum(1 for r in results if r['exists'] not in ['Claimed', 'Available'])
-        }
+        stats = compute_stats(results)
 
-        # Cache results for export
+        # Cache results for export and future searches
         last_results[username] = results
+        cache_put(username, results)
 
         return {
             'success': True,
             'username': username,
             'results': results,
             'stats': stats,
+            'cached': False,
+            'cached_at': None,
             'output': result.stdout
         }
 
@@ -144,6 +251,15 @@ def run_sherlock_search(username, timeout=10):
             'error': str(e),
             'username': username
         }
+
+
+def compute_stats(results):
+    return {
+        'total_checked': len(results),
+        'found': sum(1 for r in results if r['exists'] == 'Claimed'),
+        'not_found': sum(1 for r in results if r['exists'] == 'Available'),
+        'errors': sum(1 for r in results if r['exists'] not in ['Claimed', 'Available'])
+    }
 
 
 @app.route('/')
@@ -158,6 +274,12 @@ def index():
     except Exception:
         pass
     return render_template('index.html', site_count=site_count)
+
+
+@app.route('/api/false-positives')
+def api_false_positives():
+    """Return the curated false-positive site list (server-managed)."""
+    return jsonify({'sites': load_false_positives()})
 
 
 @app.route('/search', methods=['POST'])
@@ -288,6 +410,7 @@ def run_variants_background(search_id):
             'checked': res.get('stats', {}).get('total_checked', 0),
             'success': res.get('success', False),
             'error': res.get('error'),
+            'cached': res.get('cached', False),
         }
         with lock:
             variant_results.append(entry)
@@ -356,6 +479,7 @@ def search_progress_endpoint(search_id):
                 'username': v,
                 'status': 'done',
                 'found': done['found'],
+                'cached': done.get('cached', False),
             })
         else:
             variants_list.append({'username': v, 'status': 'pending', 'found': 0})
@@ -407,6 +531,7 @@ def search_multi():
                 'checked': res.get('stats', {}).get('total_checked', 0),
                 'success': res.get('success', False),
                 'error': res.get('error'),
+                'cached': res.get('cached', False),
             })
 
     multi_results.sort(key=lambda v: v['found'], reverse=True)
@@ -512,20 +637,22 @@ def export_comparison_pdf(fullname):
 @app.route('/results/<username>')
 def cached_results(username):
     """Return cached results for a username (fast path after a variant search)."""
-    results = last_results.get(username)
+    # Prefer the persistent on-disk cache, fall back to the in-memory one.
+    cached, cached_at = cache_get(username)
+    results = None
+    if cached is not None:
+        results = [dict(r) for r in cached]
+    elif username in last_results:
+        results = [dict(r) for r in last_results[username]]
+        cached_at = None
+
     if not results:
         return jsonify({'success': False, 'error': 'Sin resultados en caché'}), 404
 
     # Make sure no stale %20 URLs leak out of the cache
-    results = [dict(r) for r in results]
     sanitize_result_urls(results)
 
-    stats = {
-        'total_checked': len(results),
-        'found': sum(1 for r in results if r['exists'] == 'Claimed'),
-        'not_found': sum(1 for r in results if r['exists'] == 'Available'),
-        'errors': sum(1 for r in results if r['exists'] not in ['Claimed', 'Available']),
-    }
+    stats = compute_stats(results)
 
     return jsonify({
         'success': True,
@@ -533,6 +660,7 @@ def cached_results(username):
         'results': results,
         'stats': stats,
         'cached': True,
+        'cached_at': cached_at,
     })
 
 
@@ -644,4 +772,10 @@ if __name__ == '__main__':
     print("  Sherlock Web Interface")
     print("  Open http://localhost:5000 in your browser")
     print("=" * 60)
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    # Use waitress (production WSGI server, multi-threaded) when available;
+    # fall back to Flask's built-in dev server otherwise.
+    try:
+        from waitress import serve
+        serve(app, host='0.0.0.0', port=5000, threads=16)
+    except ImportError:
+        app.run(debug=False, host='0.0.0.0', port=5000)

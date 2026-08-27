@@ -1,0 +1,4 @@
+flask>=2.0
+requests>=2.25
+fpdf2>=2.7
+waitress>=2.1

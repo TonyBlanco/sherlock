@@ -45,3 +45,8 @@ tests/.excluded_sites
 
 # Vim swap files
 *.swp
+
+# Sherlock Web UI cache
+cache/
+*.log
+

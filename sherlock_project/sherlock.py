@@ -627,6 +627,13 @@ def main():
         help="Time (in seconds) to wait for response to requests (Default: 60)",
     )
     parser.add_argument(
+        "--no-update-check",
+        action="store_true",
+        dest="no_update_check",
+        default=False,
+        help="Skip the GitHub release check at startup (faster, offline-friendly).",
+    )
+    parser.add_argument(
         "--print-all",
         action="store_true",
         dest="print_all",
@@ -699,20 +706,23 @@ def main():
     # If the user presses CTRL-C, exit gracefully without throwing errors
     signal.signal(signal.SIGINT, handler)
 
-    # Check for newer version of Sherlock. If it exists, let the user know about it
-    try:
-        latest_release_raw = requests.get(forge_api_latest_release, timeout=10).text
-        latest_release_json = json_loads(latest_release_raw)
-        latest_remote_tag = latest_release_json["tag_name"]
+    # Check for newer version of Sherlock. If it exists, let the user know about it.
+    # Skippable (--no-update-check) so the web UI doesn't pay a network round-trip
+    # to GitHub on every single search.
+    if not args.no_update_check:
+        try:
+            latest_release_raw = requests.get(forge_api_latest_release, timeout=10).text
+            latest_release_json = json_loads(latest_release_raw)
+            latest_remote_tag = latest_release_json["tag_name"]
 
-        if latest_remote_tag[1:] != __version__:
-            print(
-                f"Update available! {__version__} --> {latest_remote_tag[1:]}"
-                f"\n{latest_release_json['html_url']}"
-            )
+            if latest_remote_tag[1:] != __version__:
+                print(
+                    f"Update available! {__version__} --> {latest_remote_tag[1:]}"
+                    f"\n{latest_release_json['html_url']}"
+                )
 
-    except Exception as error:
-        print(f"A problem occurred while checking for an update: {error}")
+        except Exception as error:
+            print(f"A problem occurred while checking for an update: {error}")
 
     # Make prompts
     if args.proxy is not None:
