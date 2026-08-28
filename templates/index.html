@@ -920,6 +920,66 @@
             background: #27ae60;
             box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.3);
         }
+        .export-btn-copy {
+            background: #0984e3;
+        }
+        .export-btn-copy:hover {
+            background: #0770c2;
+        }
+
+        /* ---- New-accounts diff ---- */
+        .diff-banner {
+            max-width: 960px;
+            margin: 0 auto 14px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 0.92rem;
+            display: none;
+            align-items: baseline;
+            gap: 8px;
+            line-height: 1.5;
+        }
+        .diff-banner i {
+            margin-right: 4px;
+        }
+        .diff-banner.diff-new {
+            background: rgba(0, 184, 148, 0.12);
+            border: 1px solid rgba(0, 184, 148, 0.45);
+            color: #00776b;
+        }
+        .diff-banner.diff-same {
+            background: rgba(108, 92, 231, 0.08);
+            border: 1px solid rgba(108, 92, 231, 0.3);
+            color: var(--text-secondary);
+        }
+        .diff-banner.diff-info {
+            background: rgba(253, 203, 110, 0.12);
+            border: 1px solid rgba(253, 203, 110, 0.5);
+            color: #8a6d1a;
+        }
+        body.dark-mode .diff-banner.diff-new { color: #7be3d0; }
+        body.dark-mode .diff-banner.diff-same { color: #b9b3f5; }
+        body.dark-mode .diff-banner.diff-info { color: #ffd98a; }
+        .new-chip {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 8px;
+            border-radius: 10px;
+            background: var(--success-color);
+            color: white;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            vertical-align: middle;
+            animation: pulseNew 1.8s ease infinite;
+        }
+        @keyframes pulseNew {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+        }
+        tr.row-new td {
+            background: rgba(0, 184, 148, 0.07);
+        }
 
         /* ---- Task menu ---- */
         .task-menu {
@@ -1325,6 +1385,8 @@
             <div class="cached-indicator" id="cachedIndicator" style="display: none;">
                 <i class="fas fa-bolt"></i> Resultados de la caché <span id="cachedAtText"></span>
             </div>
+            <!-- New accounts diff banner -->
+            <div class="diff-banner" id="diffBanner" style="display: none;"></div>
             <!-- Stats -->
             <div class="stats-card">
                 <div class="row">
@@ -1368,6 +1430,9 @@
                 </button>
                 <button class="export-btn export-btn-pdf" id="exportPdfBtn">
                     <i class="fas fa-file-pdf"></i> Exportar PDF
+                </button>
+                <button class="export-btn export-btn-copy" id="copyUrlsBtn" title="Copia al portapapeles todas las URLs de perfiles encontrados">
+                    <i class="fas fa-copy"></i> Copiar URLs
                 </button>
             </div>
             
@@ -2127,6 +2192,36 @@
         let hideFalsePositives = false;
         let currentResults = [];
         let currentResultsData = null;
+        let lastDiff = null;
+
+        // Copiar al portapapeles todas las URLs de perfiles encontrados
+        document.getElementById('copyUrlsBtn').addEventListener('click', function() {
+            if (!currentResultsData) return;
+            const urls = currentResultsData.results
+                .filter(r => r.exists === 'CLAIMED' || r.exists === 'Claimed')
+                .map(r => (r.url_user || '').replace(/%20/g, '_'))
+                .filter(Boolean);
+            const btn = this;
+            const done = () => {
+                btn.innerHTML = '<i class="fas fa-check"></i> ' + urls.length + ' URLs copiadas';
+                setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i> Copiar URLs'; }, 2000);
+            };
+            const text = urls.join('\n');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done).catch(() => { fallbackCopy(text); done(); });
+            } else {
+                fallbackCopy(text); done();
+            }
+        });
+
+        function fallbackCopy(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+        }
         
         document.getElementById('filterFalsePositivesBtn').addEventListener('click', function() {
             hideFalsePositives = !hideFalsePositives;
@@ -2149,6 +2244,7 @@
             const results = data.results;
             const tbody = document.getElementById('resultsBody');
             tbody.innerHTML = '';
+            const newSet = new Set((lastDiff && !lastDiff.isNewUser) ? lastDiff.newSites : []);
             
             let visible = results;
             let hiddenCount = 0;
@@ -2184,11 +2280,14 @@
                         statusText = 'Formato Inválido';
                     }
                     
+                    const isNew = newSet.has(result.site_name);
+                    if (isNew) row.classList.add('row-new');
+                    
                     row.innerHTML = `
                         <td>
                             <strong>
                                 <i class="${getSiteIcon(result.site_name)} site-icon"></i>${result.site_name}
-                            </strong>
+                            </strong>${isNew ? ' <span class="new-chip">NUEVO</span>' : ''}
                         </td>
                         <td>
                             <a href="${cleanUrl}" target="_blank" class="site-link">
@@ -2246,6 +2345,66 @@
             }
         }
         
+        // ---------------- New-accounts detection ----------------
+        // After each single search we keep the list of found sites for that
+        // username in localStorage. The next search of the same user marks
+        // every account that wasn't there before.
+        function snapshotKey(username) {
+            const u = String(username || '').replace(/%20/g, ' ').replace(/\s+/g, '').trim();
+            return u ? u.toLowerCase() : '';
+        }
+
+        function loadSnapshots() {
+            try { return JSON.parse(localStorage.getItem('sherlock-snapshots') || '{}'); }
+            catch (e) { return {}; }
+        }
+
+        function computeDiffAndStore(username, foundSites) {
+            const raw = String(username || '');
+            const key = snapshotKey(username);
+            // Skip multi-user lists and empty names — diff only makes sense
+            // for one concrete username
+            if (!key || /[,;\n]/.test(raw)) return null;
+            const snaps = loadSnapshots();
+            const prev = snaps[key] || null;
+            const prevFound = prev ? (prev.found || []) : null;
+            const newSites = prevFound ? foundSites.filter(s => !prevFound.includes(s)) : [];
+            snaps[key] = { date: new Date().toISOString(), found: foundSites };
+            // Keep only the 30 most recent usernames
+            const entries = Object.entries(snaps)
+                .sort((a, b) => new Date(b[1].date) - new Date(a[1].date))
+                .slice(0, 30);
+            try { localStorage.setItem('sherlock-snapshots', JSON.stringify(Object.fromEntries(entries))); }
+            catch (e) { /* storage full — diff still works this session */ }
+            return {
+                isNewUser: !prevFound,
+                prevDate: prev ? prev.date : null,
+                newSites: newSites,
+                total: foundSites.length
+            };
+        }
+
+        function renderDiffBanner(diff) {
+            const el = document.getElementById('diffBanner');
+            if (!diff) { el.style.display = 'none'; return; }
+            const fecha = diff.prevDate ? new Date(diff.prevDate).toLocaleDateString() : '';
+            if (diff.isNewUser) {
+                el.className = 'diff-banner diff-info';
+                el.innerHTML = '<i class="fas fa-bookmark"></i> Referencia guardada: la pr\u00f3xima vez que busques a <strong>' +
+                    escapeHtml(currentUsername) + '</strong> te marcar\u00e9 sus cuentas nuevas.';
+            } else if (diff.newSites.length > 0) {
+                el.className = 'diff-banner diff-new';
+                el.innerHTML = '<i class="fas fa-seedling"></i> <strong>' + diff.newSites.length +
+                    ' cuentas nuevas</strong> desde tu \u00faltima b\u00fasqueda' + (fecha ? ' (' + fecha + ')' : '') + ': ' +
+                    diff.newSites.map(s => escapeHtml(s)).join(', ');;
+            } else {
+                el.className = 'diff-banner diff-same';
+                el.innerHTML = '<i class="fas fa-check-circle"></i> Sin cuentas nuevas desde tu \u00faltima b\u00fasqueda' +
+                    (fecha ? ' (' + fecha + ')' : '') + ' \u2014 ' + diff.total + ' perfiles activos.';
+            }
+            el.style.display = 'block';
+        }
+
         function displayResults(data) {
             const stats = data.stats;
             const results = data.results;
@@ -2269,6 +2428,12 @@
             
             // Save to history (with cached timestamp for the lightning icon)
             saveToHistory(data.username, data.cached ? (data.cached_at || Date.now() / 1000) : null);
+            
+            // New-accounts detection: diff found sites vs the previous search
+            // of the same username (kept in localStorage, survives redeploys)
+            lastDiff = computeDiffAndStore(data.username, results.filter(r =>
+                r.exists === 'CLAIMED' || r.exists === 'Claimed').map(r => r.site_name));
+            renderDiffBanner(lastDiff);
             
             // Update stats
             document.getElementById('totalChecked').textContent = stats.total_checked;
